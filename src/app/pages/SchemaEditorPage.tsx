@@ -1,0 +1,438 @@
+import { useState } from "react";
+import { motion } from "motion/react";
+import { Card } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Textarea } from "../components/ui/textarea";
+import { Label } from "../components/ui/label";
+import { Input } from "../components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Badge } from "../components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import {
+  FileCode,
+  Plus,
+  Trash2,
+  Save,
+  Eye,
+  Copy,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
+  LayoutTemplate,
+} from "lucide-react";
+import { toast } from "sonner";
+import type { Schema, SchemaField } from "../lib/dataGenerator";
+import { parseDDL } from "../lib/dataGenerator";
+import { saveToStorage, loadFromStorage, STORAGE_KEYS } from "../lib/storage";
+import yaml from "js-yaml";
+
+const EXAMPLE_DDL = `CREATE TABLE users (
+  id INTEGER PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  age INTEGER,
+  created_at TIMESTAMP
+);`;
+
+const EXAMPLE_YAML = `tableName: users
+fields:
+  - name: id
+    type: INTEGER
+    constraints:
+      nullable: false
+  - name: name
+    type: VARCHAR
+    faker: person.fullName
+  - name: email
+    type: VARCHAR
+    faker: internet.email
+  - name: age
+    type: INTEGER
+    constraints:
+      min: 18
+      max: 80
+  - name: created_at
+    type: TIMESTAMP
+    faker: date.recent`;
+
+const TEMPLATES: Record<string, Schema> = {
+  "E-Commerce": {
+    tableName: "products",
+    fields: [
+      { name: "id", type: "UUID", faker: "string.uuid" },
+      { name: "sku", type: "VARCHAR", faker: "string.alphanumeric" },
+      { name: "name", type: "VARCHAR", faker: "commerce.productName" },
+      { name: "price", type: "DECIMAL", faker: "commerce.price" },
+      { name: "stock", type: "INTEGER", constraints: { min: 0, max: 1000 } },
+      { name: "category", type: "VARCHAR", constraints: { enum: ["Tech", "Home", "Fashion"] } },
+    ],
+  },
+  "Financial": {
+    tableName: "transactions",
+    fields: [
+      { name: "tx_id", type: "UUID", faker: "string.uuid" },
+      { name: "account", type: "VARCHAR", faker: "finance.accountNumber" },
+      { name: "amount", type: "DECIMAL", faker: "finance.amount" },
+      { name: "type", type: "VARCHAR", constraints: { enum: ["DEBIT", "CREDIT"] } },
+      { name: "timestamp", type: "TIMESTAMP", faker: "date.recent" },
+    ],
+  },
+  "Healthcare": {
+    tableName: "patients",
+    fields: [
+      { name: "patient_id", type: "INTEGER" },
+      { name: "first_name", type: "VARCHAR", faker: "person.firstName" },
+      { name: "last_name", type: "VARCHAR", faker: "person.lastName" },
+      { name: "blood_type", type: "VARCHAR", constraints: { enum: ["A+", "B+", "O+", "AB-"] } },
+      { name: "dob", type: "DATE", faker: "date.birthdate" },
+    ],
+  },
+};
+
+export function SchemaEditorPage() {
+  const [inputMode, setInputMode] = useState<"ddl" | "yaml" | "visual">("ddl");
+  const [ddlInput, setDdlInput] = useState(EXAMPLE_DDL);
+  const [yamlInput, setYamlInput] = useState(EXAMPLE_YAML);
+  const [schema, setSchema] = useState<Schema>(() => 
+    loadFromStorage(STORAGE_KEYS.SCHEMA, {
+      tableName: "users",
+      fields: [
+        { name: "id", type: "INTEGER" },
+        { name: "name", type: "VARCHAR", faker: "person.fullName" },
+        { name: "email", type: "VARCHAR", faker: "internet.email" },
+      ],
+    })
+  );
+
+  const handleParseDDL = () => {
+    try {
+      const parsed = parseDDL(ddlInput);
+      setSchema(parsed);
+      toast.success("DDL parsed successfully!");
+    } catch (error: any) {
+      toast.error(`DDL Error: ${error.message || "Failed to parse"}`);
+    }
+  };
+
+  const handleParseYAML = () => {
+    try {
+      const parsed = yaml.load(yamlInput) as Schema;
+      if (parsed && typeof parsed === 'object') {
+        setSchema(parsed);
+        toast.success("YAML parsed successfully!");
+      }
+    } catch (error: any) {
+      toast.error(`YAML Error: ${error.message || "Failed to parse"}`);
+    }
+  };
+
+  const validateSchema = (s: Schema) => {
+    if (!s.tableName.trim()) return "Table name is required";
+    if (s.fields.length === 0) return "At least one field is required";
+    if (s.fields.some(f => !f.name.trim())) return "All fields must have a name";
+    return null;
+  };
+
+  const handleSyncToYAML = () => {
+    try {
+      const error = validateSchema(schema);
+      if (error) {
+        return toast.error(error);
+      }
+      const dumped = yaml.dump(schema);
+      setYamlInput(dumped);
+      toast.success("YAML updated from Visual Schema!");
+    } catch (error) {
+      toast.error("Failed to sync to YAML");
+    }
+  };
+
+  const handleAddField = () => {
+    setSchema({
+      ...schema,
+      fields: [
+        ...schema.fields,
+        { name: `field_${schema.fields.length + 1}`, type: "VARCHAR" },
+      ],
+    });
+  };
+
+  const handleRemoveField = (index: number) => {
+    setSchema({
+      ...schema,
+      fields: schema.fields.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleUpdateField = (index: number, updates: Partial<SchemaField>) => {
+    const newFields = [...schema.fields];
+    newFields[index] = { ...newFields[index], ...updates };
+    setSchema({ ...schema, fields: newFields });
+  };
+
+  const handleSaveSchema = () => {
+    const error = validateSchema(schema);
+    if (error) {
+      return toast.error(error);
+    }
+    saveToStorage(STORAGE_KEYS.SCHEMA, schema);
+    toast.success("Schema saved successfully!");
+  };
+
+  const handleClearSchema = () => {
+    if (confirm("Are you sure you want to clear the current schema?")) {
+      const emptySchema: Schema = {
+        tableName: "new_table",
+        fields: [],
+      };
+      setSchema(emptySchema);
+      toast.info("Schema cleared");
+    }
+  };
+
+  const handleCopySchema = () => {
+    navigator.clipboard.writeText(JSON.stringify(schema, null, 2));
+    toast.success("Schema copied to clipboard!");
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Schema Editor</h2>
+          <p className="text-slate-400 mt-1">
+            Define your data structure using DDL, YAML, or visual editor
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="border-slate-700 hover:bg-slate-800/50">
+                <LayoutTemplate className="w-4 h-4 mr-2" />
+                Load Template
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="bg-slate-900 border-slate-800 text-slate-200">
+              {Object.keys(TEMPLATES).map((name) => (
+                <DropdownMenuItem key={name} onClick={() => setSchema(TEMPLATES[name])}>
+                  {name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            variant="outline"
+            onClick={handleCopySchema}
+            className="border-slate-700 hover:bg-slate-800/50"
+          >
+            <Copy className="w-4 h-4 mr-2" />
+            Copy Schema
+          </Button>
+          <Button
+            onClick={handleSaveSchema}
+            className="bg-gradient-to-r from-purple-500 to-cyan-500"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            Save Schema
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Input Section */}
+        <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800/50 p-6">
+          <Tabs value={inputMode} onValueChange={(v) => setInputMode(v as any)}>
+            <TabsList className="bg-slate-800/50 mb-6">
+              <TabsTrigger value="ddl">DDL</TabsTrigger>
+              <TabsTrigger value="yaml">YAML</TabsTrigger>
+              <TabsTrigger value="visual">Visual</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="ddl" className="space-y-4">
+              <div className="space-y-2">
+                <Label>SQL DDL Schema</Label>
+                <Textarea
+                  value={ddlInput}
+                  onChange={(e) => setDdlInput(e.target.value)}
+                  className="font-mono text-sm min-h-[400px] bg-slate-950/50 border-slate-700"
+                  placeholder="CREATE TABLE..."
+                />
+              </div>
+              <Button onClick={handleParseDDL} className="w-full">
+                <FileCode className="w-4 h-4 mr-2" />
+                Parse DDL
+              </Button>
+            </TabsContent>
+
+            <TabsContent value="yaml" className="space-y-4">
+              <div className="space-y-2">
+                <Label>YAML Schema Definition</Label>
+                <Textarea
+                  value={yamlInput}
+                  onChange={(e) => setYamlInput(e.target.value)}
+                  className="font-mono text-sm min-h-[400px] bg-slate-950/50 border-slate-700"
+                  placeholder="tableName: users..."
+                />
+              </div>
+              <Button onClick={handleParseYAML} className="w-full">
+                <FileCode className="w-4 h-4 mr-2" />
+                Parse YAML
+              </Button>
+            </TabsContent>
+
+            <TabsContent value="visual" className="space-y-4">
+              <div className="space-y-2">
+                <Label>Table Name</Label>
+                <Input
+                  value={schema.tableName}
+                  onChange={(e) => setSchema({ ...schema, tableName: e.target.value })}
+                  className="bg-slate-950/50 border-slate-700"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Fields</Label>
+                  <Button size="sm" variant="outline" onClick={handleAddField}>
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add Field
+                  </Button>
+                </div>
+
+                <div className="space-y-3 max-h-[350px] overflow-y-auto">
+                  {schema.fields.map((field, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="flex items-center gap-3 p-3 bg-slate-950/50 rounded-lg border border-slate-800"
+                    >
+                      <div className="flex-1 grid grid-cols-3 gap-3">
+                        <Input
+                          value={field.name}
+                          onChange={(e) =>
+                            handleUpdateField(index, { name: e.target.value })
+                          }
+                          placeholder="Field name"
+                          className="bg-slate-900/50 border-slate-700 text-sm"
+                        />
+                        <Input
+                          value={field.type}
+                          onChange={(e) =>
+                            handleUpdateField(index, { type: e.target.value })
+                          }
+                          placeholder="Type"
+                          className="bg-slate-900/50 border-slate-700 text-sm"
+                        />
+                        <Input
+                          value={field.faker || ""}
+                          onChange={(e) =>
+                            handleUpdateField(index, { faker: e.target.value })
+                          }
+                          placeholder="Faker Method"
+                          className="bg-slate-900/50 border-slate-700 text-sm"
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleRemoveField(index)}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+
+              <Button variant="secondary" onClick={handleSyncToYAML} className="w-full mt-4">
+                <FileCode className="w-4 h-4 mr-2" />
+                Sync Visual to YAML
+              </Button>
+            </TabsContent>
+          </Tabs>
+        </Card>
+
+        {/* Preview Section */}
+        <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800/50 p-6">
+          <div className="flex items-center gap-2 mb-6">
+            <Eye className="w-5 h-5 text-purple-400" />
+            <h3 className="text-lg font-semibold text-white">Schema Preview</h3>
+          </div>
+
+          <div className="space-y-4">
+            {/* Table Info */}
+            <div className="p-4 bg-slate-950/50 rounded-lg border border-slate-800">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-slate-400">Table Name</span>
+                <Badge variant="outline" className="font-mono">
+                  {schema.tableName}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-400">Total Fields</span>
+                <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/20">
+                  {schema.fields.length}
+                </Badge>
+              </div>
+            </div>
+
+            {/* Fields List */}
+            <div className="space-y-2">
+              <Label className="text-slate-300">Fields Structure</Label>
+              <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {schema.fields.map((field, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="p-4 bg-gradient-to-r from-slate-800/30 to-slate-800/10 rounded-lg border border-slate-800/50 hover:border-slate-700 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-400" />
+                        <span className="font-mono font-medium text-white">
+                          {field.name}
+                        </span>
+                      </div>
+                      <Badge variant="secondary" className="font-mono text-xs">
+                        {field.type}
+                      </Badge>
+                    </div>
+                    {field.faker && (
+                      <div className="flex items-center gap-2 text-xs text-slate-400 mt-2">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>Faker: {field.faker}</span>
+                      </div>
+                    )}
+                    {field.constraints && Object.keys(field.constraints).length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {Object.entries(field.constraints).map(([key, value]) => (
+                          <Badge
+                            key={key}
+                            variant="outline"
+                            className="text-xs border-cyan-500/20 text-cyan-400"
+                          >
+                            {key}: {String(value)}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
