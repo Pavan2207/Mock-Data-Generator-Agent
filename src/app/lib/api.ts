@@ -12,8 +12,19 @@ const sanitizeUrl = (url: string) => {
 
 const getApiBaseUrl = () => {
   const settings = JSON.parse(localStorage.getItem("appSettings") || "{}");
-  let url = settings.apiBaseUrl || import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+  // Priority: 1. User saved settings, 2. Environment variable, 3. Hardcoded fallback
+  const url = 
+    settings.apiBaseUrl || 
+    import.meta.env.VITE_API_BASE_URL || 
+    "http://localhost:3000";
+    
   return sanitizeUrl(url);
+};
+
+const isMixedContent = (url: string) => {
+  if (typeof window === 'undefined') return false;
+  // If the app is on HTTPS but the target is HTTP, it's mixed content
+  return window.location.protocol === 'https:' && url.startsWith('http://');
 };
 
 async function callOllama(baseUrl: string, prompt: string, model: string = "llama3") {
@@ -50,13 +61,18 @@ export const api = {
     const baseUrl = sanitizeUrl(config?.apiBaseUrl || getApiBaseUrl());
     const endpoint = `${baseUrl}/api/db/test`;
     
+    if (isMixedContent(baseUrl)) {
+      throw new Error("Mixed Content Blocked: A secure (HTTPS) site cannot talk to an insecure (HTTP) gateway. Please use an HTTPS URL for your gateway.");
+    }
+
+    console.log(`[API] Testing DB connection via gateway at: ${endpoint}`);
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(config),
       signal,
     }).catch(err => {
-      throw new Error(`Gateway Unreachable at ${baseUrl}. Details: ${err.message}`);
+      throw new Error(`Gateway Unreachable. Browser cannot connect to ${baseUrl}. Check AWS Port 3000 and CORS.`);
     });
     
     if (!response.ok) {

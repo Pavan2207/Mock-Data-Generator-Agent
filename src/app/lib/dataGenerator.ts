@@ -1,4 +1,4 @@
-import { faker } from "@faker-js/faker";
+import type { Faker } from "@faker-js/faker";
 
 export interface SchemaField {
   name: string;
@@ -45,19 +45,19 @@ function inferFaker(name: string, type: string): string | undefined {
 }
 
 // Map field types to faker methods
-export function generateFieldValue(field: SchemaField): any {
+export function generateFieldValue(field: SchemaField, fakerInstance: Faker): any {
   const { type, faker: fakerMethod, constraints } = field;
 
   // Handle custom faker methods
   if (fakerMethod) {
     try {
       const parts = fakerMethod.split(".");
-      let method: any = faker;
+      let method: any = fakerInstance;
       for (const part of parts) {
         method = method[part];
       }
       if (typeof method === "function") {
-        return method();
+        return method.bind(fakerInstance)();
       }
     } catch (e) {
       console.warn(`Invalid faker method: ${fakerMethod}`);
@@ -66,7 +66,7 @@ export function generateFieldValue(field: SchemaField): any {
 
   // Handle enum constraints
   if (constraints?.enum && constraints.enum.length > 0) {
-    return faker.helpers.arrayElement(constraints.enum);
+    return fakerInstance.helpers.arrayElement(constraints.enum);
   }
 
   // Default type-based generation
@@ -76,39 +76,39 @@ export function generateFieldValue(field: SchemaField): any {
     case "string":
     case "text":
       if (field.name.toLowerCase().includes("email")) {
-        return faker.internet.email();
+        return fakerInstance.internet.email();
       }
       if (field.name.toLowerCase().includes("name")) {
-        return faker.person.fullName();
+        return fakerInstance.person.fullName();
       }
       if (field.name.toLowerCase().includes("phone")) {
-        return faker.phone.number();
+        return fakerInstance.phone.number();
       }
       if (field.name.toLowerCase().includes("address")) {
-        return faker.location.streetAddress();
+        return fakerInstance.location.streetAddress();
       }
       if (field.name.toLowerCase().includes("city")) {
-        return faker.location.city();
+        return fakerInstance.location.city();
       }
       if (field.name.toLowerCase().includes("country")) {
-        return faker.location.country();
+        return fakerInstance.location.country();
       }
       if (field.name.toLowerCase().includes("company")) {
-        return faker.company.name();
+        return fakerInstance.company.name();
       }
       if (field.name.toLowerCase().includes("description")) {
-        return faker.lorem.paragraph();
+        return fakerInstance.lorem.paragraph();
       }
       if (field.name.toLowerCase().includes("title")) {
-        return faker.lorem.sentence(3);
+        return fakerInstance.lorem.sentence(3);
       }
-      return faker.lorem.words(3);
+      return fakerInstance.lorem.words(3);
 
     // Numbers
     case "int":
     case "integer":
     case "bigint":
-      return faker.number.int({
+      return fakerInstance.number.int({
         min: constraints?.min ?? 1,
         max: constraints?.max ?? 10000,
       });
@@ -118,7 +118,7 @@ export function generateFieldValue(field: SchemaField): any {
     case "numeric":
     case "decimal":
     case "double":
-      return faker.number.float({
+      return fakerInstance.number.float({
         min: constraints?.min ?? 10,
         max: constraints?.max ?? 5000,
         fractionDigits: 2,
@@ -127,30 +127,30 @@ export function generateFieldValue(field: SchemaField): any {
     // Boolean
     case "boolean":
     case "bool":
-      return faker.datatype.boolean();
+      return fakerInstance.datatype.boolean();
 
     // Dates
     case "date":
-      return faker.date.past({ years: 1 }).toISOString().split("T")[0];
+      return fakerInstance.date.past({ years: 1 }).toISOString().split("T")[0];
 
     case "datetime":
     case "timestamp":
-      return faker.date.recent({ days: 30 }).toISOString();
+      return fakerInstance.date.recent({ days: 30 }).toISOString();
 
     // UUID
     case "uuid":
-      return faker.string.uuid();
+      return fakerInstance.string.uuid();
 
     // JSON
     case "json":
     case "jsonb":
       return JSON.stringify({
-        key: faker.lorem.word(),
-        value: faker.lorem.sentence(),
+        key: fakerInstance.lorem.word(),
+        value: fakerInstance.lorem.sentence(),
       });
 
     default:
-      return faker.lorem.word();
+      return fakerInstance.lorem.word();
   }
 }
 
@@ -158,17 +158,17 @@ export function generateFieldValue(field: SchemaField): any {
  * Optimized generator factory that resolves field logic once 
  * to avoid expensive switch/regex/string parsing inside loops.
  */
-function createFieldGenerator(field: SchemaField): () => any {
+function createFieldGenerator(field: SchemaField, fakerInstance: Faker): () => any {
   // Resolve specific faker method if provided
   if (field.faker) {
     try {
       const parts = field.faker.split(".");
-      let method: any = faker;
+      let method: any = fakerInstance;
       for (const part of parts) {
         method = method[part];
       }
       if (typeof method === "function") {
-        return method.bind(faker);
+        return method.bind(fakerInstance);
       }
     } catch (e) {
       console.warn(`Invalid faker method: ${field.faker}`);
@@ -176,14 +176,17 @@ function createFieldGenerator(field: SchemaField): () => any {
   }
 
   // Fallback to type-based generation
-  return () => generateFieldValue(field);
+  return () => generateFieldValue(field, fakerInstance);
 }
 
 export async function generateMockData(schema: Schema, rowCount: number): Promise<any[]> {
+  // Dynamically load faker only when needed
+  const { faker } = await import("@faker-js/faker");
+
   // 1. Pre-resolve generators and metadata outside the loop
   const fieldGenerators = schema.fields.map(field => ({
     name: field.name,
-    generate: createFieldGenerator(field),
+    generate: createFieldGenerator(field, faker),
     isNullable: !!field.constraints?.nullable
   }));
 

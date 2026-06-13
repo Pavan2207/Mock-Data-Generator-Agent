@@ -33,13 +33,13 @@ import { api } from "../lib/api";
 export function SettingsPage() {
   const defaultSettings = {
     dbType: "postgresql",
-    pgHost: "localhost",
-    pgPort: "5432",
-    pgDatabase: "mock",
-    pgUser: "postgres",
-    pgPassword: "StrongPassword123",
-    pgSsl: true, // Default to true for cloud providers like Neon
-    apiBaseUrl: "http://16.171.39.63:3000",
+    pgHost: import.meta.env.VITE_PG_HOST || "localhost",
+    pgPort: import.meta.env.VITE_PG_PORT || "5432",
+    pgDatabase: import.meta.env.VITE_PG_DATABASE || "mock",
+    pgUser: import.meta.env.VITE_PG_USER || "postgres",
+    pgPassword: import.meta.env.VITE_PG_PASSWORD || "StrongPassword123",
+    pgSsl: import.meta.env.VITE_PG_SSL === "true", 
+    apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "http://localhost:3000",
 
     aiProvider: "gemini",
     ollamaUrl: "http://localhost:11434",
@@ -227,6 +227,17 @@ export function SettingsPage() {
                     Test Gateway
                   </Button>
                 </div>
+                
+                {window.location.protocol === 'https:' && settings.apiBaseUrl.startsWith('http://') && (
+                  <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-[10px] text-red-400 flex items-center gap-2">
+                    <AlertCircle className="w-3 h-3" />
+                    <span>
+                      <b>Mixed Content Warning:</b> Vercel is secure (HTTPS), but your gateway is insecure (HTTP). 
+                      Browser security will block this. You need to use HTTPS for your EC2 Gateway.
+                    </span>
+                  </div>
+                )}
+
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">
                   The target server for real SQL execution and seeding
                 </p>
@@ -236,6 +247,16 @@ export function SettingsPage() {
                   </div>
                 )}
               </div>
+
+              {settings.pgPort === "3000" && (
+                <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-center gap-2 text-yellow-500 text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>
+                    <strong>Configuration Conflict:</strong> Your PostgreSQL port is set to 3000, which is the same as your Gateway. 
+                    Database usually runs on <strong>5432</strong>.
+                  </span>
+                </div>
+              )}
 
               <Separator className="bg-slate-800" />
 
@@ -669,6 +690,16 @@ volumes:
                   </Button>
                 </div>
               </div>
+
+              {settings.aiProvider === "ollama" && window.location.protocol === 'https:' && (
+                <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-[10px] text-yellow-400 flex items-center gap-2">
+                  <Info className="w-3 h-3" />
+                  <span>
+                    <b>Note:</b> Local Ollama (HTTP) usually won't work from a deployed HTTPS site. 
+                    Switch to <b>Gemini</b> for the live version or use a secure tunnel.
+                  </span>
+                </div>
+              )}
 
               {settings.aiProvider === "ollama" && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
