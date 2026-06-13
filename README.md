@@ -21,11 +21,11 @@ DataForge AI is an advanced mock data generation agent designed for data enginee
 
 ### 🎯 Key Highlights
 
-- ✨ **AI-Powered Generation:** Intelligent data creation using Faker.js with context-aware field mapping
+- ✨ **AI-Powered Generation:** Intelligent data creation using Google Gemini AI with context-aware field mapping
 - 📊 **Schema-Aware:** Respects constraints, types, relationships, and business logic
 - 🎨 **Beautiful UI/UX:** Modern dark theme with glassmorphism, animations, and gradients
 - 📦 **Multi-Format Export:** CSV, JSON, and SQL with one click
-- 🔌 **Integration Ready:** PostgreSQL, SQLite, Ollama, Discord webhooks
+- 🔌 **Integration Ready:** PostgreSQL, SQLite, Google Gemini AI, Discord webhooks
 - 📈 **Analytics Dashboard:** Track generation history, trends, and statistics
 
 ---
@@ -98,7 +98,7 @@ DataForge AI is an advanced mock data generation agent designed for data enginee
 ### Integrations
 - **PostgreSQL** - Production database
 - **SQLite** - Lightweight database
-- **Ollama** - Local AI models
+- **Google Gemini AI** - Primary AI generation engine
 - **Discord Webhooks** - Notifications
 
 ---

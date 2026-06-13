@@ -50,6 +50,21 @@ vercel
 - Output Directory: `dist`
 - Install Command: `pnpm install`
 
+**Serverless Gateway (Vercel Native):**
+DataForge AI uses a Vercel Serverless Function to bridge the frontend to your PostgreSQL database securely.
+1. Ensure `api/db/[...path].ts` exists in your project root.
+2. Configure Database environment variables in Vercel Dashboard:
+   - `PG_HOST`: Your database host
+   - `PG_USER`: Your database user
+   - `PG_PASSWORD`: Your database password
+   - `PG_DATABASE`: Your database name
+   - `PG_PORT`: 5432
+   - `PG_SSL`: `true` or `false`
+
+**Updating Changes:**
+When you make changes locally, simply push to your main branch:
+`git add . && git commit -m "Your update message" && git push origin main`
+
 ---
 
 ### 2. Netlify

@@ -73,8 +73,7 @@
 |---------|--------|---------------|
 | PostgreSQL | ✅ Active | EC2 + Docker Production Environment (Port 5432 Open) |
 | SQLite | ✅ Default | In-browser support |
-| Ollama | ✅ Configured | Local AI model support |
-| OpenAI | ✅ Configured | API key integration |
+| Google Gemini AI | ✅ Primary | Cloud-based AI generation |
 | Discord | ✅ Configured | Webhook notifications |
 
 ---
@@ -89,6 +88,9 @@ dataforge-ai/
 │   │   │   ├── layouts/
 │   │   │   │   └── RootLayout.tsx          # Main app layout with sidebar
 │   │   │   └── ui/                          # 40+ Radix UI components
+│   ├── api/
+│   │   ├── db/
+│   │   │   └── [...path].ts             # Vercel Serverless Gateway
 │   │   ├── pages/
 │   │   │   ├── HomePage.tsx                 # Dashboard with analytics
 │   │   │   ├── SchemaEditorPage.tsx        # DDL/YAML/Visual editor
