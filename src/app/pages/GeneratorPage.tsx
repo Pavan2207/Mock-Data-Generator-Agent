@@ -8,6 +8,8 @@ import { Slider } from "../components/ui/slider";
 import { Badge } from "../components/ui/badge";
 import { Progress } from "../components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Separator } from "../components/ui/separator";
+import { Switch } from "../components/ui/switch";
 import {
   Table,
   TableBody,
@@ -27,6 +29,8 @@ import {
   Loader2,
   DatabaseZap,
   RefreshCcw,
+  Cloud,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Schema } from "../lib/dataGenerator";
@@ -45,6 +49,7 @@ export function GeneratorPage() {
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
   const [exportFormat, setExportFormat] = useState<"csv" | "json" | "sql">("csv");
+  const [autoSeed, setAutoSeed] = useState(false);
 
   useEffect(() => {
     const savedSchema = loadFromStorage<Schema | null>(STORAGE_KEYS.SCHEMA, null);
@@ -80,42 +85,43 @@ export function GeneratorPage() {
     setStatusMessage("Initializing engine...");
     setGeneratedData([]);
 
+    const controller = new AbortController();
+
     try {
       let data: any[] = [];
       let attempts = 0;
       const maxRetries = 3;
       let isValid = false;
       let useFallback = false;
+      
+      // Auto-fallback if row count is too high for practical LLM generation
+      if (settings.aiProvider !== "none" && rowCount > 50) {
+        toast.info("Row count high. Using local engine for performance.");
+        useFallback = true;
+      }
 
       while (attempts < maxRetries && !isValid) {
         attempts++;
-        const baseProgress = ((attempts - 1) / maxRetries) * 100;
-        setProgress(Math.min(baseProgress + 10, 90));
         
         if (settings.aiProvider !== "none" && !useFallback) {
           setStatusMessage(`Attempt ${attempts}: AI Agent generating realistic patterns...`);
+          // Simulated progress for AI wait
+          const progressInterval = setInterval(() => {
+            setProgress(prev => (prev < 90 ? prev + 2 : prev));
+          }, 1500);
+
+          try {
+            data = await api.generateWithAI(schema, rowCount, settings, controller.signal);
+            clearInterval(progressInterval);
+          } catch (err) {
+            clearInterval(progressInterval);
+            throw err;
+          }
         } else {
           setStatusMessage(`Attempt ${attempts}: Generating ${rowCount} rows via local Faker...`);
-        }
-        
-        await new Promise((resolve) => setTimeout(resolve, 400));
-
-        try {
-          if (settings.aiProvider !== "none" && !useFallback) {
-            data = await api.generateWithAI(schema, rowCount, settings);
-          } else {
-            await new Promise((resolve) => setTimeout(resolve, 300));
-            data = await generateMockData(schema, rowCount);
-          }
-        } catch (aiError: any) {
-          if (settings.aiProvider !== "none" && !useFallback) {
-            console.warn("AI Generation failed, falling back to local engine:", aiError);
-            setStatusMessage("AI Agent engine failure. Activating resilient local engine...");
-            useFallback = true;
-            attempts--; // Re-run this cycle logic with the fallback engine
-            continue;
-          }
-          throw aiError;
+          setProgress(50);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          data = await generateMockData(schema, rowCount);
         }
 
         setStatusMessage(`Attempt ${attempts}: Verifying data integrity via Agent Loop...`);
@@ -173,6 +179,10 @@ export function GeneratorPage() {
       setStatusMessage("Generation successful!");
       toast.success(`Generated ${rowCount} rows successfully!`);
 
+      if (autoSeed) {
+        await handleSeedToDatabase(data);
+      }
+
       if (settings.notifyOnComplete && settings.discordWebhook) {
         api.sendNotification(settings.discordWebhook, {
           title: "Data Generation Complete",
@@ -208,13 +218,14 @@ export function GeneratorPage() {
     }
   };
 
-  const handleSeedToDatabase = async () => {
-    if (!generatedData.length) return;
+  const handleSeedToDatabase = async (dataToSeed?: any[]) => {
+    const targetData = dataToSeed || generatedData;
+    if (!targetData.length) return;
     setIsSeeding(true);
     try {
-      const settings = loadFromStorage(STORAGE_KEYS.SETTINGS, { dbType: "sqlite", sqlitePath: "data.sqlite" });
-      await api.seedDatabase(schema!, generatedData, settings);
-      toast.success(`Successfully seeded ${generatedData.length} rows to ${settings.dbType}`);
+      const settings = loadFromStorage(STORAGE_KEYS.SETTINGS, { dbType: "postgresql" });
+      await api.seedDatabase(schema!, targetData, settings);
+      toast.success(`Successfully seeded ${targetData.length} rows to ${settings.dbType}`);
     } catch (error: any) {
       console.error("Seeding Error:", error);
       let message = error.message || "Failed to seed data";
@@ -236,10 +247,7 @@ export function GeneratorPage() {
     let content: string;
     let filename: string;
     let mimeType: string;
-
-    const settings = loadFromStorage(STORAGE_KEYS.SETTINGS, { dbType: "postgresql" });
-    const dialect = settings.dbType === "sqlite" ? "sqlite" : "postgresql";
-
+    
     switch (exportFormat) {
       case "csv":
         content = exportToCSV(generatedData);
@@ -252,7 +260,7 @@ export function GeneratorPage() {
         mimeType = "application/json";
         break;
       case "sql":
-        content = exportToSQL(generatedData, schema, dialect);
+        content = exportToSQL(generatedData, schema);
         filename = `${schema.tableName}.sql`;
         mimeType = "text/sql";
         break;
@@ -338,6 +346,33 @@ export function GeneratorPage() {
                   </Button>
                 ))}
               </div>
+            </div>
+
+            <Separator className="bg-slate-800" />
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Cloud className="w-4 h-4 text-purple-400" />
+                  <div>
+                    <p className="text-xs font-bold text-white uppercase tracking-wider">Direct to EC2</p>
+                    <p className="text-[10px] text-slate-500">Auto-save after generation</p>
+                  </div>
+                </div>
+                <Switch 
+                  checked={autoSeed}
+                  onCheckedChange={setAutoSeed}
+                />
+              </div>
+
+              {autoSeed && (
+                <div className="flex items-center gap-2 px-1">
+                  <ShieldCheck className="w-3 h-3 text-green-500" />
+                  <span className="text-[10px] text-slate-400 italic">
+                    Target: {loadFromStorage(STORAGE_KEYS.SETTINGS, {}).apiBaseUrl || "Not Set"}
+                  </span>
+                </div>
+              )}
             </div>
 
             <Button

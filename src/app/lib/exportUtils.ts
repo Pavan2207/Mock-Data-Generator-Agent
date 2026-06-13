@@ -10,7 +10,7 @@ export function exportToJSON(data: any[]): string {
   return JSON.stringify(data, null, 2);
 }
 
-export function exportToSQL(data: any[], schema: Schema, dialect: "postgresql" | "sqlite" = "postgresql"): string {
+export function exportToSQL(data: any[], schema: Schema): string {
   const tableName = schema.tableName;
   const columns = schema.fields.map((f) => f.name);
 
@@ -19,9 +19,7 @@ export function exportToSQL(data: any[], schema: Schema, dialect: "postgresql" |
       const value = row[col];
       if (value === null) return "NULL";
       if (typeof value === "string") return `'${value.replace(/'/g, "''")}'`;
-      if (typeof value === "boolean") {
-        return dialect === "sqlite" ? (value ? "1" : "0") : (value ? "TRUE" : "FALSE");
-      }
+      if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
       return value;
     });
 
@@ -31,7 +29,7 @@ export function exportToSQL(data: any[], schema: Schema, dialect: "postgresql" |
   const sql = inserts.join("\n");
 
   try {
-    return format(sql, { language: dialect });
+    return format(sql, { language: "postgresql" });
   } catch (e) {
     return sql;
   }

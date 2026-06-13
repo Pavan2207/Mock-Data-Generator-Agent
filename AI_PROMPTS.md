@@ -220,6 +220,29 @@ Implement real SQLite storage verification:
 - Refactored exportToSQL to handle SQLite boolean and string escaping.
 - Integrated dynamic dialect selection in the export workflow.
 
+### 15. Neon & Cloud SQL Integration
+```
+Implement support for real PostgreSQL via Docker:
+1. Streamline Settings UI to focus on PostgreSQL Docker parameters.
+2. Update troubleshooting guides with specific Docker CLI commands.
+3. Refine API Gateway logic to emphasize the requirement for a CORS-enabled backend proxy.
+```
+
+**AI Actions:**
+- Removed SQLite-specific UI elements to focus on Docker-based PostgreSQL.
+- Added interactive Docker commands to the troubleshooting diagnostic guide.
+
+### 15. Neon PostgreSQL Cloud Integration
+```
+Integrate support for cloud-based PostgreSQL services like Neon:
+1. Add an SSL toggle to the PostgreSQL configuration in Settings.
+2. Update the PostgreSQL description to reflect cloud/non-Docker setups.
+3. Ensure the API Gateway is prepared to handle SSL connections for PostgreSQL.
+```
+
+**AI Actions:**
+- Added pgSsl setting and UI switch.
+- Refined PostgreSQL description for broader applicability.
 ---
 
 ## AI Capabilities Demonstrated

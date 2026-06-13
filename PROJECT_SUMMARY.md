@@ -71,7 +71,7 @@
 
 | Service | Status | Configuration |
 |---------|--------|---------------|
-| PostgreSQL | ✅ Configured | Docker-ready setup |
+| PostgreSQL | ✅ Active | EC2 + Docker Production Environment (Port 5432 Open) |
 | SQLite | ✅ Default | In-browser support |
 | Ollama | ✅ Configured | Local AI model support |
 | OpenAI | ✅ Configured | API key integration |

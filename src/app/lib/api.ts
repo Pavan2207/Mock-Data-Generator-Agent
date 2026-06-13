@@ -1,9 +1,19 @@
 import { Schema } from "./dataGenerator";
 
+const sanitizeUrl = (url: string) => {
+  if (!url) return "";
+  return url
+    .trim()
+    .replace(/[.,;/\s]+$/, "") // Remove trailing punctuation (like the dot in your screenshot)
+    .replace(/\/health$/, "")  // Remove /health if user pasted the full status URL
+    .split(/[?#]/)[0]          // Remove query params and fragments
+    .replace(/\/+$/, "");      // Final trailing slash cleanup
+};
+
 const getApiBaseUrl = () => {
   const settings = JSON.parse(localStorage.getItem("appSettings") || "{}");
-  const url = settings.apiBaseUrl || import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
-  return url.replace(/\/$/, "");
+  let url = settings.apiBaseUrl || import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+  return sanitizeUrl(url);
 };
 
 async function callOllama(baseUrl: string, prompt: string, model: string = "llama3") {
@@ -37,14 +47,23 @@ async function callOllama(baseUrl: string, prompt: string, model: string = "llam
 
 export const api = {
   async testDatabaseConnection(config: any, signal?: AbortSignal) {
-    const baseUrl = (config?.apiBaseUrl || getApiBaseUrl()).replace(/\/$/, "");
-    const response = await fetch(`${baseUrl}/api/db/test`, {
+    const baseUrl = sanitizeUrl(config?.apiBaseUrl || getApiBaseUrl());
+    const endpoint = `${baseUrl}/api/db/test`;
+    
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(config),
       signal,
+    }).catch(err => {
+      throw new Error(`Gateway Unreachable at ${baseUrl}. Details: ${err.message}`);
     });
-    if (!response.ok) throw new Error("Database connection failed");
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error(`[API] DB Connection failed at ${endpoint}:`, errorData);
+      throw new Error(errorData.message || errorData.error || `Connection failed: ${response.statusText}`);
+    }
     return response.json();
   },
 
@@ -85,7 +104,7 @@ export const api = {
     throw new Error("No AI provider configured");
   },
 
-  async generateWithAI(schema: Schema, rowCount: number, settings: any) {
+  async generateWithAI(schema: Schema, rowCount: number, settings: any, signal?: AbortSignal) {
     if (settings.aiProvider === "ollama") {
       const prompt = `Generate ${rowCount} rows of highly realistic mock data for a database table named "${schema.tableName}".
       Fields structure: ${JSON.stringify(schema.fields)}.
@@ -123,6 +142,7 @@ export const api = {
             }]
           }]
         }),
+        signal,
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -146,24 +166,33 @@ export const api = {
   },
 
   async seedDatabase(schema: Schema, data: any[], settings: any) {
-    const baseUrl = (settings?.apiBaseUrl || getApiBaseUrl()).replace(/\/$/, "");
+    const baseUrl = sanitizeUrl(settings?.apiBaseUrl || getApiBaseUrl());
     const response = await fetch(`${baseUrl}/api/db/seed`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ schema, data, config: settings }),
     });
-    if (!response.ok) throw new Error("Failed to seed database");
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error("[API] Seeding failed:", errorData);
+      throw new Error(errorData.message || errorData.error || `Seeding failed: ${response.statusText}`);
+    }
     return response.json();
   },
 
   async queryDatabase(sql: string, settings: any) {
-    const baseUrl = (settings?.apiBaseUrl || getApiBaseUrl()).replace(/\/$/, "");
+    const baseUrl = sanitizeUrl(settings?.apiBaseUrl || getApiBaseUrl());
     const response = await fetch(`${baseUrl}/api/db/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sql, config: settings }),
     });
-    if (!response.ok) throw new Error("Database query failed");
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const status = response.status === 404 ? "Not Found (Check Gateway Routes)" : response.statusText;
+      console.error(`[API] Query failed at ${baseUrl}/api/db/query:`, errorData);
+      throw new Error(errorData.message || errorData.error || `Query failed: ${response.statusText}`);
+    }
     return response.json();
   },
 
@@ -214,25 +243,44 @@ export const api = {
   async checkAiStatus(provider: string, url?: string, key?: string, signal?: AbortSignal) {
     try {
       let endpoint = "";
+      const base = sanitizeUrl(url || getApiBaseUrl());
+
       if (provider === "ollama") {
-        const baseUrl = (url || "").replace(/\/$/, "");
-        endpoint = `${baseUrl}/api/version`;
-      } else if (provider === "gemini" && key) {
-        endpoint = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
+        endpoint = `${base}/api/version`;
+      } else if (provider === "gemini") {
+        endpoint = `https://generativelanguage.googleapis.com/v1beta/models?key=${key || ""}`;
+      } else if (provider === "gateway") {
+        // Check if the Node.js bridge is actually reachable
+        endpoint = `${base}/health`;
       } else {
-        const baseUrl = (url || getApiBaseUrl()).replace(/\/$/, "");
-        endpoint = `${baseUrl}/api/ai/status`;
+        endpoint = `${base}/api/ai/status`;
       }
 
-      const response = await fetch(endpoint, { mode: 'cors', cache: 'no-cache', signal, credentials: 'omit' });
+      const response = await fetch(endpoint, { 
+        mode: 'cors', 
+        cache: 'no-cache', 
+        signal, 
+        credentials: 'omit' 
+      }).catch(() => null);
+      
+      if (!response) {
+        console.error(`[API] ${provider} is completely unreachable at ${endpoint}`);
+        return false;
+      }
+      
       if (!response.ok) {
         console.warn(`[API] AI Status check failed for ${provider} [${response.status}]:`, response.statusText);
         return false;
       }
-      return response.ok;
+      // For the gateway, we want to ensure it's specifically the bridge responding
+      const data = await response.json();
+      return data; // Return full data object for better UI feedback
     } catch (error: any) {
-      if (error.name === 'TypeError' && provider === 'ollama') {
-        console.error(`[API] Network Error for Ollama. This usually means the service is down OR CORS is blocking the request. Verify OLLAMA_ORIGINS="*" is set and the app is restarted.`);
+      if (error.name === 'AbortError') {
+        console.error(`[API] Connection to ${provider} timed out.`);
+      } else if (error.name === 'TypeError') {
+        const target = url || "service";
+        console.error(`[API] Network Error for ${provider}. Browser cannot reach ${target}. Check CORS and Firewalls.`);
       } else {
         console.error(`[API] Connection error for ${provider}:`, error);
       }

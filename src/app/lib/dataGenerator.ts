@@ -18,6 +18,32 @@ export interface Schema {
   fields: SchemaField[];
 }
 
+// Helper to infer faker methods based on field name and type
+function inferFaker(name: string, type: string): string | undefined {
+  const n = name.toLowerCase();
+  const t = type.toLowerCase();
+
+  if (n.includes("email")) return "internet.email";
+  if (n.includes("name")) {
+    if (n.includes("first")) return "person.firstName";
+    if (n.includes("last")) return "person.lastName";
+    return "person.fullName";
+  }
+  if (n.includes("phone")) return "phone.number";
+  if (n.includes("address")) return "location.streetAddress";
+  if (n.includes("city")) return "location.city";
+  if (n.includes("country")) return "location.country";
+  if (n.includes("company")) return "company.name";
+  if (n.includes("price") || n.includes("amount")) return "commerce.price";
+  if (n.includes("description")) return "lorem.paragraph";
+  
+  if (t === "uuid") return "string.uuid";
+  if (t === "date") return "date.past";
+  if (t === "timestamp" || t === "datetime") return "date.recent";
+  
+  return undefined;
+}
+
 // Map field types to faker methods
 export function generateFieldValue(field: SchemaField): any {
   const { type, faker: fakerMethod, constraints } = field;
@@ -128,62 +154,101 @@ export function generateFieldValue(field: SchemaField): any {
   }
 }
 
-export async function generateMockData(schema: Schema, rowCount: number): Promise<any[]> {
-  const data: any[] = [];
-  for (let i = 0; i < rowCount; i++) {
-    const row: any = {};
-
-    for (const field of schema.fields) {
-      // Handle nullable
-      if (field.constraints?.nullable && Math.random() < 0.1) {
-        row[field.name] = null;
-      } else {
-        row[field.name] = generateFieldValue(field);
+/**
+ * Optimized generator factory that resolves field logic once 
+ * to avoid expensive switch/regex/string parsing inside loops.
+ */
+function createFieldGenerator(field: SchemaField): () => any {
+  // Resolve specific faker method if provided
+  if (field.faker) {
+    try {
+      const parts = field.faker.split(".");
+      let method: any = faker;
+      for (const part of parts) {
+        method = method[part];
       }
+      if (typeof method === "function") {
+        return method.bind(faker);
+      }
+    } catch (e) {
+      console.warn(`Invalid faker method: ${field.faker}`);
     }
-
-    data.push(row);
   }
 
+  // Fallback to type-based generation
+  return () => generateFieldValue(field);
+}
+
+export async function generateMockData(schema: Schema, rowCount: number): Promise<any[]> {
+  // 1. Pre-resolve generators and metadata outside the loop
+  const fieldGenerators = schema.fields.map(field => ({
+    name: field.name,
+    generate: createFieldGenerator(field),
+    isNullable: !!field.constraints?.nullable
+  }));
+
+  const data = new Array(rowCount);
+  const fieldsCount = fieldGenerators.length;
+
+  // 2. Optimized generation loop
+  for (let i = 0; i < rowCount; i++) {
+    const row: any = {};
+    for (let j = 0; j < fieldsCount; j++) {
+      const fg = fieldGenerators[j];
+      if (fg.isNullable && Math.random() < 0.1) {
+        row[fg.name] = null;
+      } else {
+        row[fg.name] = fg.generate();
+      }
+    }
+    data[i] = row;
+  }
   return data;
 }
 
 // Parse DDL to schema
 export function parseDDL(ddl: string): Schema {
-  const lines = ddl.trim().split("\n");
-  const tableName = lines[0].match(/CREATE TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["\`\[]?(\w+)["\`\]]?/i)?.[1] || "table";
+  // Clean comments and normalize whitespace
+  const cleanDDL = ddl.replace(/--.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
+  
+  // Extract Table Name
+  const tableMatch = cleanDDL.match(/CREATE TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["\`\[]?(\w+)["\`\]]?/i);
+  const tableName = tableMatch ? tableMatch[1] : "table";
+
+  // Extract content between the first ( and last )
+  const firstParen = cleanDDL.indexOf("(");
+  const lastParen = cleanDDL.lastIndexOf(")");
+  
+  if (firstParen === -1 || lastParen === -1) throw new Error("Invalid DDL: Could not find table body");
+  
+  const body = cleanDDL.substring(firstParen + 1, lastParen);
+  
+  // Split by commas, but ignore commas inside parentheses (e.g., DECIMAL(10,2))
+  const fieldLines = body.split(/,(?![^(]*\))/);
 
   const fields: SchemaField[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line || line === "(" || line === ");" || line === ")") continue;
+  for (const line of fieldLines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.toUpperCase().startsWith("PRIMARY KEY") || trimmed.toUpperCase().startsWith("CONSTRAINT")) continue;
 
-    // Improved regex to capture types with precision like VARCHAR(255) or DECIMAL(10,2)
-    const match = line.match(/["\`\[]?(\w+)["\`\]]?\s+([\w()]+)(.+)?/i);
+    // Match name, type (including parentheses), and the rest
+    const match = trimmed.match(/["\`\[]?(\w+)["\`\]]?\s+([\w()]+)([\s\S]*)?/i);
     if (match) {
       let [, name, type, rest] = match;
-      
-      // Normalize type (e.g., VARCHAR(255) -> VARCHAR)
       const baseType = type.split('(')[0].toUpperCase();
+      const restUpper = (rest || "").toUpperCase();
+      const nameLower = name.toLowerCase();
 
       const field: SchemaField = {
         name,
         type: baseType,
-        constraints: {},
+        faker: inferFaker(nameLower, baseType),
+        constraints: {
+          nullable: !restUpper.includes("NOT NULL") && !restUpper.includes("PRIMARY KEY"),
+          unique: restUpper.includes("UNIQUE") || restUpper.includes("PRIMARY KEY")
+        },
       };
-
-      if (rest) {
-        if (rest.includes("NOT NULL")) {
-          field.constraints!.nullable = false;
-        } else {
-          field.constraints!.nullable = true;
-        }
-
-        if (rest.includes("UNIQUE")) {
-          field.constraints!.unique = true;
-        }
-      }
 
       fields.push(field);
     }
