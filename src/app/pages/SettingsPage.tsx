@@ -39,11 +39,9 @@ export function SettingsPage() {
     pgUser: import.meta.env.VITE_PG_USER || "postgres",
     pgPassword: import.meta.env.VITE_PG_PASSWORD || "StrongPassword123",
     pgSsl: import.meta.env.VITE_PG_SSL === "true", 
-    apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "http://localhost:3000",
+    apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "/api/db", // Default to Vercel Serverless Function endpoint
 
     aiProvider: "gemini",
-    ollamaUrl: "http://localhost:11434",
-    ollamaModel: "llama3",
 
     geminiKey: "",
     geminiModel: "gemini-3.5-flash",
@@ -111,13 +109,8 @@ export function SettingsPage() {
       
       if (error.name === 'AbortError') {
         message = "Connection timed out. The server took too long to respond (8s).";
-      } else if (message === "Failed to fetch" || error.name === "TypeError") {
-        const isLocalhost = settings.apiBaseUrl.includes('localhost');
-        message = `Network Error: Gateway unreachable at ${settings.apiBaseUrl}. ${
-          isLocalhost 
-            ? "Tip: If your database is on EC2, replace 'localhost' with your EC2 Public IP." 
-            : "Check if the Node.js process is running and Port 3000 is open in AWS Security Groups."
-        }`;
+      } else if (message.includes("Gateway Unreachable") || message === "Failed to fetch" || error.name === "TypeError") {
+        message = `Network Error: Vercel Serverless Function unreachable at ${settings.apiBaseUrl}. Ensure the function is deployed and healthy.`;
       }
       
       setConnectionError(message);
@@ -193,7 +186,7 @@ export function SettingsPage() {
                           .replace(/\/health$/, "") 
                       }) 
                     }
-                    placeholder="http://localhost:3000"
+                    placeholder="/api/db" // Placeholder for Vercel Serverless Function
                     className={cn(
                       "bg-slate-950/50 border-slate-700",
                       settings.apiBaseUrl.includes('localhost') && "border-yellow-500/30",
@@ -217,9 +210,7 @@ export function SettingsPage() {
                           toast.success("Gateway Reachable (Database pending config)");
                         }
                       } else {
-                        const msg = settings.apiBaseUrl.includes('localhost')
-                          ? "Gateway unreachable. If using EC2, use the Public IP instead of 'localhost'."
-                          : "Gateway unreachable. Ensure your backend server is running and Port 3000 is open.";
+                        const msg = `Vercel Serverless Function unreachable at ${settings.apiBaseUrl}. Check Vercel deployment logs.`;
                         toast.error(msg);
                       }
                     }}
@@ -228,16 +219,6 @@ export function SettingsPage() {
                   </Button>
                 </div>
                 
-                {window.location.protocol === 'https:' && settings.apiBaseUrl.startsWith('http://') && (
-                  <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-[10px] text-red-400 flex items-center gap-2">
-                    <AlertCircle className="w-3 h-3" />
-                    <span>
-                      <b>Mixed Content Warning:</b> Vercel is secure (HTTPS), but your gateway is insecure (HTTP). 
-                      Browser security will block this. You need to use HTTPS for your EC2 Gateway.
-                    </span>
-                  </div>
-                )}
-
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">
                   The target server for real SQL execution and seeding
                 </p>
@@ -512,14 +493,14 @@ app.listen(3000, '0.0.0.0', () => console.log('Gateway running on port 3000 (Glo
                       </div>
 
                       <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                        <p className="text-blue-400 font-bold mb-1 flex items-center gap-1 text-[10px] uppercase">
-                          <Shield className="w-3 h-3" /> AWS EC2 Deployment
+                        <p className="text-purple-400 font-bold mb-1 flex items-center gap-1 text-[10px] uppercase">
+                          <Cloud className="w-3 h-3" /> Vercel Serverless Gateway
                         </p>
                         <div className="space-y-1 text-slate-400 leading-relaxed">
-                          <p>Currently configured for EC2 at <code className="text-cyan-400 font-bold">16.171.39.63</code></p>
-                          <p>1. Open AWS Console → Security Groups.</p>
-                          <p>2. Add Inbound Rule: <b className="text-white">Custom TCP - Port 3000</b>.</p>
-                          <p>3. Set Source to <code className="text-white">0.0.0.0/0</code> or your IP.</p>
+                          <p>1. Deploy your frontend to Vercel.</p>
+                          <p>2. Create a Vercel Serverless Function (e.g., <code className="text-cyan-400">/api/db/[...path].ts</code>) to act as your database gateway.</p>
+                          <p>3. Configure PostgreSQL credentials as <b className="text-white">Environment Variables</b> in your Vercel project (e.g., <code className="text-cyan-400">PG_HOST</code>, <code className="text-cyan-400">PG_USER</code>).</p>
+                          <p>4. The frontend will automatically call this Vercel Serverless Function over HTTPS.</p>
                         </div>
                       </div>
 
@@ -641,7 +622,6 @@ volumes:
                   onChange={(e) => setSettings({ ...settings, aiProvider: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-950/50 border border-slate-700 rounded-lg text-white focus:border-cyan-500 outline-none"
                 >
-                  <option value="ollama">Ollama (Free / Local)</option>
                   <option value="gemini">Google Gemini (Online Free Tier)</option>
                 </select>
                 <div className="flex items-center gap-2 mt-2">
@@ -655,7 +635,7 @@ volumes:
 
                       const status = await api.checkAiStatus(
                         settings.aiProvider, 
-                        settings.ollamaUrl,
+                        undefined,
                         settings.geminiKey,
                         controller.signal
                       );
@@ -668,9 +648,6 @@ volumes:
                         toast.error(
                           <div className="space-y-2">
                             <p className="font-semibold">{settings.aiProvider} connection failed.</p>
-                            {settings.aiProvider === "ollama" && (
-                              <p className="text-[11px] opacity-90">Verify OLLAMA_ORIGINS="*" is set and the service is running.</p>
-                            )}
                           </div>,
                           { duration: 6000 }
                         );
@@ -690,45 +667,6 @@ volumes:
                   </Button>
                 </div>
               </div>
-
-              {settings.aiProvider === "ollama" && window.location.protocol === 'https:' && (
-                <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-[10px] text-yellow-400 flex items-center gap-2">
-                  <Info className="w-3 h-3" />
-                  <span>
-                    <b>Note:</b> Local Ollama (HTTP) usually won't work from a deployed HTTPS site. 
-                    Switch to <b>Gemini</b> for the live version or use a secure tunnel.
-                  </span>
-                </div>
-              )}
-
-              {settings.aiProvider === "ollama" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="ollamaUrl">Ollama URL</Label>
-                    <Input
-                      id="ollamaUrl"
-                      value={settings.ollamaUrl}
-                      onChange={(e) =>
-                        setSettings({ ...settings, ollamaUrl: e.target.value })
-                      }
-                      className="bg-slate-950/50 border-slate-700"
-                      placeholder="http://localhost:11434"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ollamaModel">Ollama Model</Label>
-                    <Input
-                      id="ollamaModel"
-                      value={settings.ollamaModel}
-                      onChange={(e) =>
-                        setSettings({ ...settings, ollamaModel: e.target.value })
-                      }
-                      className="bg-slate-950/50 border-slate-700"
-                      placeholder="llama3"
-                    />
-                  </div>
-                </div>
-              )}
 
               {settings.aiProvider === "gemini" && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -762,20 +700,14 @@ volumes:
 
               <div className={cn(
                 "p-3 rounded-lg border transition-colors",
-                settings.aiProvider === "ollama" 
-                  ? "bg-green-500/10 border-green-500/20" 
-                  : "bg-blue-500/10 border-blue-500/20"
+                "bg-blue-500/10 border-blue-500/20"
               )}>
                 <div className="flex items-start gap-2">
-                  <Sparkles className={cn("w-4 h-4 mt-0.5", settings.aiProvider === "ollama" ? "text-green-400" : "text-blue-400")} />
-                  <div className={cn("text-sm", settings.aiProvider === "ollama" ? "text-green-400" : "text-blue-400")}>
-                    <p className="font-medium mb-1">
-                      {settings.aiProvider === "ollama" ? "Free Local AI Mode" : "Free Online AI Mode"}
-                    </p>
-                    <p className={cn("opacity-80", settings.aiProvider === "ollama" ? "text-green-300/80" : "text-blue-300/80")}>
-                      {settings.aiProvider === "ollama" 
-                        ? "Running Ollama locally. No API costs or keys required. Ensure Ollama is running on your machine with 'ollama serve'."
-                        : "Using Google Gemini Free Tier. Requires an API key from Google AI Studio. Generous limits for development."}
+                  <Sparkles className="w-4 h-4 mt-0.5 text-blue-400" />
+                  <div className="text-sm text-blue-400">
+                    <p className="font-medium mb-1">Free Online AI Mode</p>
+                    <p className="opacity-80 text-blue-300/80">
+                      Using Google Gemini Free Tier. Requires an API key from Google AI Studio. Generous limits for development.
                     </p>
                   </div>
                 </div>

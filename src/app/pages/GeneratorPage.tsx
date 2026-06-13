@@ -194,18 +194,11 @@ export function GeneratorPage() {
       console.error("Generation Error:", error);
       const message = error?.response?.data?.message || error?.message || "Failed to generate data";
       
-      let errorMsg = message === "Failed to fetch" ? "Network Error: AI service is unreachable." : message;
-      if (message === "Failed to fetch" && settings.aiProvider === "ollama") {
-        errorMsg = "Ollama is unreachable. Ensure the service is running and OLLAMA_ORIGINS='*' is set.";
-      } else if (message.toLowerCase().includes("not found") && settings.aiProvider === "ollama") {
-        errorMsg = (
-          <div className="space-y-2">
-            <p>Ollama model '{settings.ollamaModel}' not found.</p>
-            <code className="block p-2 bg-black/30 rounded border border-white/10 text-[10px] font-mono">
-              ollama pull {settings.ollamaModel}
-            </code>
-          </div>
-        ) as any;
+      let errorMsg = message;
+      if (message === "Failed to fetch") {
+        errorMsg = window.location.protocol === 'https:' 
+          ? "Secure Connection Error: Vercel (HTTPS) cannot reach your HTTP service. Use an HTTPS tunnel." 
+          : "Network Error: AI service is unreachable.";
       }
       
       toast.error(errorMsg);

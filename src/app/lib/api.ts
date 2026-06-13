@@ -21,50 +21,12 @@ const getApiBaseUrl = () => {
   return sanitizeUrl(url);
 };
 
-const isMixedContent = (url: string) => {
-  if (typeof window === 'undefined') return false;
-  // If the app is on HTTPS but the target is HTTP, it's mixed content
-  return window.location.protocol === 'https:' && url.startsWith('http://');
-};
-
-async function callOllama(baseUrl: string, prompt: string, model: string = "llama3") {
-  // Sanitize base URL to ensure we don't double up on /api
-  const cleanBase = baseUrl.replace(/\/api$/, "").replace(/\/$/, "");
-  
-  const response = await fetch(`${cleanBase}/api/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: false,
-      format: "json"
-    }),
-  });
-  
-  if (!response.ok) {
-    try {
-      const errorJson = await response.json();
-      throw new Error(`Ollama Error: ${errorJson.error || response.statusText}`);
-    } catch (e: any) {
-      if (e.message.startsWith("Ollama Error:")) throw e;
-      throw new Error(`Ollama Error: ${response.statusText}`);
-    }
-  }
-  const result = await response.json();
-  const cleanJson = result.response.replace(/```json|```/g, "").trim();
-  return JSON.parse(cleanJson);
-}
-
 export const api = {
   async testDatabaseConnection(config: any, signal?: AbortSignal) {
-    const baseUrl = sanitizeUrl(config?.apiBaseUrl || getApiBaseUrl());
-    const endpoint = `${baseUrl}/api/db/test`;
+    // When using Vercel Serverless Functions, the API base URL is relative
+    const baseUrl = sanitizeUrl(config?.apiBaseUrl || ''); // Use empty string as base, will be '/api/db'
+    const endpoint = `${baseUrl}/api/db/test`; // This will resolve to /api/db/test on Vercel
     
-    if (isMixedContent(baseUrl)) {
-      throw new Error("Mixed Content Blocked: A secure (HTTPS) site cannot talk to an insecure (HTTP) gateway. Please use an HTTPS URL for your gateway.");
-    }
-
     console.log(`[API] Testing DB connection via gateway at: ${endpoint}`);
     const response = await fetch(endpoint, {
       method: "POST",
@@ -84,14 +46,6 @@ export const api = {
   },
 
   async generateSchemaFromPrompt(prompt: string, settings: any) {
-    if (settings.aiProvider === "ollama") {
-      return callOllama(
-        settings.ollamaUrl.replace(/\/$/, ""),
-        `Create a database schema based on this description: "${prompt}". Return ONLY a JSON object with a tableName and fields array. Each field should have name, type, and optionally faker and constraints.`,
-        settings.ollamaModel
-      );
-    }
-
     if (settings.aiProvider === "gemini") {
       const model = (settings.geminiModel || "gemini-3.5-flash").replace(/^models\//, "");
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiKey}`, {
@@ -121,24 +75,6 @@ export const api = {
   },
 
   async generateWithAI(schema: Schema, rowCount: number, settings: any, signal?: AbortSignal) {
-    if (settings.aiProvider === "ollama") {
-      const prompt = `Generate ${rowCount} rows of highly realistic mock data for a database table named "${schema.tableName}".
-      Fields structure: ${JSON.stringify(schema.fields)}.
-      Requirements:
-      1. Use deep context for fields like addresses, product names, and company names.
-      2. Ensure data across columns is consistent (e.g., city matches state/zip).
-      3. Return ONLY a valid JSON array of objects. 
-      4. Do not include markdown formatting or explanations.`;
-
-      const content = await callOllama(
-        settings.ollamaUrl.replace(/\/$/, ""),
-        prompt,
-        settings.ollamaModel
-      );
-      // Handle case where LLM returns an object instead of array
-      return Array.isArray(content) ? content : (Object.values(content)[0] || []);
-    }
-
     if (settings.aiProvider === "gemini") {
       const model = (settings.geminiModel || "gemini-3.5-flash").replace(/^models\//, "");
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.geminiKey}`, {
@@ -182,7 +118,10 @@ export const api = {
   },
 
   async seedDatabase(schema: Schema, data: any[], settings: any) {
-    const baseUrl = sanitizeUrl(settings?.apiBaseUrl || getApiBaseUrl());
+    // When using Vercel Serverless Functions, the API base URL is relative
+    const baseUrl = sanitizeUrl(settings?.apiBaseUrl || '');
+    // The endpoint will be /api/db/seed on Vercel
+
     const response = await fetch(`${baseUrl}/api/db/seed`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -197,7 +136,10 @@ export const api = {
   },
 
   async queryDatabase(sql: string, settings: any) {
-    const baseUrl = sanitizeUrl(settings?.apiBaseUrl || getApiBaseUrl());
+    // When using Vercel Serverless Functions, the API base URL is relative
+    const baseUrl = sanitizeUrl(settings?.apiBaseUrl || '');
+    // The endpoint will be /api/db/query on Vercel
+
     const response = await fetch(`${baseUrl}/api/db/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -207,6 +149,7 @@ export const api = {
       const errorData = await response.json().catch(() => ({}));
       const status = response.status === 404 ? "Not Found (Check Gateway Routes)" : response.statusText;
       console.error(`[API] Query failed at ${baseUrl}/api/db/query:`, errorData);
+      console.error(`[API] Query failed at ${baseUrl}/api/db/query [${response.status}]:`, errorData);
       throw new Error(errorData.message || errorData.error || `Query failed: ${response.statusText}`);
     }
     return response.json();
@@ -232,7 +175,9 @@ export const api = {
   },
 
   async generateData(schema: Schema, rowCount: number) {
-    const response = await fetch(`${getApiBaseUrl()}/api/generate`, {
+    // This endpoint is for server-side generation, which is now handled by the Vercel function
+    const baseUrl = sanitizeUrl(''); // Base URL is relative for Vercel function
+    const response = await fetch(`${baseUrl}/api/db/generate`, { // Assuming a /api/db/generate endpoint
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ schema, rowCount }),
@@ -242,7 +187,10 @@ export const api = {
   },
 
   async saveGeneration(record: any) {
-    const response = await fetch(`${getApiBaseUrl()}/api/history`, {
+    // History is now handled by the Vercel function
+    const baseUrl = sanitizeUrl(''); // Base URL is relative for Vercel function
+    // The endpoint will be /api/db/history on Vercel
+    const response = await fetch(`${baseUrl}/api/history`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(record),
@@ -251,7 +199,9 @@ export const api = {
   },
 
   async getHistory() {
-    const response = await fetch(`${getApiBaseUrl()}/api/history`);
+    // History is now handled by the Vercel function
+    const baseUrl = sanitizeUrl(''); // Base URL is relative for Vercel function
+    const response = await fetch(`${baseUrl}/api/history`);
     if (!response.ok) throw new Error("Failed to fetch history from server");
     return response.json();
   },
@@ -259,11 +209,11 @@ export const api = {
   async checkAiStatus(provider: string, url?: string, key?: string, signal?: AbortSignal) {
     try {
       let endpoint = "";
-      const base = sanitizeUrl(url || getApiBaseUrl());
+      // For Vercel Serverless Function, the base is relative
+      const base = sanitizeUrl(url || ''); 
 
-      if (provider === "ollama") {
-        endpoint = `${base}/api/version`;
-      } else if (provider === "gemini") {
+      // AI status checks (Gemini is external, gateway is now Vercel function)
+      if (provider === "gemini") {
         endpoint = `https://generativelanguage.googleapis.com/v1beta/models?key=${key || ""}`;
       } else if (provider === "gateway") {
         // Check if the Node.js bridge is actually reachable
