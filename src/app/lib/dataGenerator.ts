@@ -1,5 +1,4 @@
 import { faker } from "@faker-js/faker";
-import { api } from "./api";
 
 export interface SchemaField {
   name: string;
@@ -89,11 +88,13 @@ export function generateFieldValue(field: SchemaField): any {
       });
 
     case "float":
+    case "real":
+    case "numeric":
     case "decimal":
     case "double":
       return faker.number.float({
-        min: constraints?.min ?? 0,
-        max: constraints?.max ?? 1000,
+        min: constraints?.min ?? 10,
+        max: constraints?.max ?? 5000,
         fractionDigits: 2,
       });
 
@@ -128,17 +129,6 @@ export function generateFieldValue(field: SchemaField): any {
 }
 
 export async function generateMockData(schema: Schema, rowCount: number): Promise<any[]> {
-  const settings = JSON.parse(localStorage.getItem("appSettings") || "{}");
-  
-  // If AI is configured and not using simple Faker mode
-  if (settings.aiProvider && (settings.openaiKey || settings.aiProvider === 'ollama')) {
-    try {
-      return await api.generateWithLLM(schema, rowCount);
-    } catch (e) {
-      console.error("AI Generation failed, falling back to Faker:", e);
-    }
-  }
-
   const data: any[] = [];
   for (let i = 0; i < rowCount; i++) {
     const row: any = {};
@@ -161,7 +151,7 @@ export async function generateMockData(schema: Schema, rowCount: number): Promis
 // Parse DDL to schema
 export function parseDDL(ddl: string): Schema {
   const lines = ddl.trim().split("\n");
-  const tableName = lines[0].match(/CREATE TABLE\s+(\w+)/i)?.[1] || "table";
+  const tableName = lines[0].match(/CREATE TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["\`\[]?(\w+)["\`\]]?/i)?.[1] || "table";
 
   const fields: SchemaField[] = [];
 
@@ -170,7 +160,7 @@ export function parseDDL(ddl: string): Schema {
     if (!line || line === "(" || line === ");" || line === ")") continue;
 
     // Improved regex to capture types with precision like VARCHAR(255) or DECIMAL(10,2)
-    const match = line.match(/(\w+)\s+([\w()]+)(.+)?/i);
+    const match = line.match(/["\`\[]?(\w+)["\`\]]?\s+([\w()]+)(.+)?/i);
     if (match) {
       let [, name, type, rest] = match;
       

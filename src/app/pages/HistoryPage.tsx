@@ -53,13 +53,12 @@ export function HistoryPage() {
     const generationsByDay: Record<string, number> = {};
     daysOfWeek.forEach(day => (generationsByDay[day] = 0)); // Initialize all days to 0
 
-    // Filter for records within the last 7 days
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     history.filter(record => new Date(record.timestamp) >= sevenDaysAgo).forEach(record => {
       const date = new Date(record.timestamp);
-      const dayIndex = date.getDay(); // 0 for Sunday, 1 for Monday, etc.
+      const dayIndex = date.getDay();
       const dayName = daysOfWeek[dayIndex];
       generationsByDay[dayName]++;
     });
@@ -67,7 +66,6 @@ export function HistoryPage() {
     return daysOfWeek.map(day => ({ day, generations: generationsByDay[day] }));
   }, [history]);
 
-  // Derive statistics from real data
   const formatDistribution = useMemo(() => {
     const counts = history.reduce((acc: any, curr) => {
       acc[curr.format] = (acc[curr.format] || 0) + 1;
@@ -114,7 +112,6 @@ export function HistoryPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white">Generation History</h2>
@@ -122,7 +119,6 @@ export function HistoryPage() {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800/50 p-6">
           <div className="flex items-start justify-between">
@@ -177,9 +173,7 @@ export function HistoryPage() {
         </Card>
       </div>
 
-      {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Activity Chart can be updated similarly to use real timestamps */}
 
         <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800/50 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Format Distribution</h3>
@@ -223,7 +217,6 @@ export function HistoryPage() {
         </Card>
       </div>
 
-      {/* Search and List */}
       <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800/50 p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-white">Recent Generations</h3>

@@ -6,6 +6,7 @@ import {
   Sparkles,
   History,
   Settings,
+  Users,
   Menu,
   X,
   Sun,
@@ -21,6 +22,7 @@ const navItems = [
   { path: "/generate", label: "Generate", icon: Sparkles },
   { path: "/history", label: "History", icon: History },
   { path: "/settings", label: "Settings", icon: Settings },
+  { path: "/teams", label: "Teams", icon: Users },
 ];
 
 export function RootLayout() {

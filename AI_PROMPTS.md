@@ -158,6 +158,68 @@ Create comprehensive settings for:
 - Implemented localStorage persistence
 - Created toggle switches for features
 
+### 9. Iterative Debugging & Refinement Loop
+```
+The initial DDL parser is failing on multi-line statements and doesn't handle 'DEFAULT' values correctly. 
+Refactor the parseDDL function in dataGenerator.ts to:
+1. Use a more robust Regex or a simple state machine to handle multi-line SQL.
+2. Extract default values and map them to the 'faker' field if possible.
+3. Ensure table names are trimmed of backticks or quotes.
+```
+
+**AI Actions:**
+- Replaced simple split logic with a structured regex-based capture group system.
+- Added support for `DEFAULT` value extraction.
+- Implemented a cleanup pass for SQL identifiers.
+
+### 10. Real AI & SQL Integration
+```
+Integrate real database seeding and AI model usage:
+1. Add handleSeedToDatabase in GeneratorPage to push data to the configured SQL connection.
+2. Update handleGenerate to branch into api.generateWithAI if an AI provider is active.
+3. Update status messages to reflect real-time AI inference and database operations.
+```
+
+**AI Actions:**
+- Added DatabaseZap icon and seeding logic.
+- Enhanced generation loop to distinguish between Faker and LLM providers.
+
+### 11. AI Everything & Real SQLite
+```
+Finalize production readiness:
+1. Implement AI Schema Assistant in SchemaEditorPage for natural language to DDL.
+2. Remove 'Free Tier' mock warnings in Settings to reflect production capability.
+3. Update Generator Loop to prioritize AI-based generation and real SQL seeding.
+```
+
+**AI Actions:**
+- Integrated handleAIGenerateSchema with UI triggers.
+- Switched GeneratorPage logic to default to AI Inference path.
+
+### 12. Real SQLite Database Path
+```
+Refine the Database configuration to support real SQLite connectivity:
+1. Add an input field for the SQLite filesystem path.
+2. Update the Production SQL Mode information to dynamically reflect the selected path.
+3. Ensure the testConnection function validates both the API Gateway and the database path.
+```
+
+**AI Actions:**
+- Added sqlitePath to settings and UI.
+- Enhanced validation logic for connection testing.
+
+### 13. Real SQLite Storage & Verification
+```
+Implement real SQLite storage verification:
+1. Update exportUtils.ts to support 'sqlite' dialect for SQL formatting.
+2. Add queryDatabase to api.ts to allow verifying seeded data.
+3. Update GeneratorPage to use the correct dialect based on settings.
+```
+
+**AI Actions:**
+- Refactored exportToSQL to handle SQLite boolean and string escaping.
+- Integrated dynamic dialect selection in the export workflow.
+
 ---
 
 ## AI Capabilities Demonstrated

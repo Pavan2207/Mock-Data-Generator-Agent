@@ -74,7 +74,6 @@ const recentActivity = [
 export function HomePage() {
   return (
     <div className="space-y-8">
-      {/* Hero Section */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -156,7 +155,6 @@ export function HomePage() {
         </Card>
       </motion.div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
@@ -183,7 +181,6 @@ export function HomePage() {
         })}
       </div>
 
-      {/* Features */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {features.map((feature, index) => {
           const Icon = feature.icon;
@@ -212,9 +209,7 @@ export function HomePage() {
         })}
       </div>
 
-      {/* Recent Activity & Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Activity */}
         <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800/50 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Recent Activity</h3>
           <div className="space-y-3">
@@ -241,7 +236,6 @@ export function HomePage() {
           </div>
         </Card>
 
-        {/* Usage Chart */}
         <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800/50 p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Generation Trends</h3>
           <ResponsiveContainer width="100%" height={250}>

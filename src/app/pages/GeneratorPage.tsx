@@ -25,6 +25,8 @@ import {
   FileCode,
   CheckCircle2,
   Loader2,
+  DatabaseZap,
+  RefreshCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Schema } from "../lib/dataGenerator";
@@ -32,13 +34,16 @@ import { generateMockData } from "../lib/dataGenerator";
 import { api } from "../lib/api";
 import { exportToCSV, exportToJSON, exportToSQL, downloadFile } from "../lib/exportUtils";
 import { loadFromStorage, STORAGE_KEYS, addGenerationToHistory } from "../lib/storage";
+import { cn } from "../components/ui/utils";
 
 export function GeneratorPage() {
   const [schema, setSchema] = useState<Schema | null>(null);
   const [rowCount, setRowCount] = useState(100);
   const [generatedData, setGeneratedData] = useState<any[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState("");
   const [exportFormat, setExportFormat] = useState<"csv" | "json" | "sql">("csv");
 
   useEffect(() => {
@@ -68,51 +73,157 @@ export function GeneratorPage() {
       return;
     }
 
+    const settings = loadFromStorage(STORAGE_KEYS.SETTINGS, { aiProvider: "none", ollamaModel: "llama3" });
+
     setIsGenerating(true);
     setProgress(0);
-
-    // Simulate progress
-    const interval = setInterval(() => {
-      setProgress((prev) => Math.min(prev + 10, 90));
-    }, 100);
+    setStatusMessage("Initializing engine...");
+    setGeneratedData([]);
 
     try {
-      let data: any[];
-      const settings = loadFromStorage(STORAGE_KEYS.SETTINGS, { backendEnabled: false });
+      let data: any[] = [];
+      let attempts = 0;
+      const maxRetries = 3;
+      let isValid = false;
+      let useFallback = false;
 
-      if (settings.backendEnabled) {
-        // Use real API if explicitly enabled in settings
-        data = await api.generateData(schema, rowCount);
-      } else {
-        // Fallback to local generation
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        data = await generateMockData(schema, rowCount);
+      while (attempts < maxRetries && !isValid) {
+        attempts++;
+        const baseProgress = ((attempts - 1) / maxRetries) * 100;
+        setProgress(Math.min(baseProgress + 10, 90));
+        
+        if (settings.aiProvider !== "none" && !useFallback) {
+          setStatusMessage(`Attempt ${attempts}: AI Agent generating realistic patterns...`);
+        } else {
+          setStatusMessage(`Attempt ${attempts}: Generating ${rowCount} rows via local Faker...`);
+        }
+        
+        await new Promise((resolve) => setTimeout(resolve, 400));
+
+        try {
+          if (settings.aiProvider !== "none" && !useFallback) {
+            data = await api.generateWithAI(schema, rowCount, settings);
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            data = await generateMockData(schema, rowCount);
+          }
+        } catch (aiError: any) {
+          if (settings.aiProvider !== "none" && !useFallback) {
+            console.warn("AI Generation failed, falling back to local engine:", aiError);
+            setStatusMessage("AI Agent engine failure. Activating resilient local engine...");
+            useFallback = true;
+            attempts--; // Re-run this cycle logic with the fallback engine
+            continue;
+          }
+          throw aiError;
+        }
+
+        setStatusMessage(`Attempt ${attempts}: Verifying data integrity via Agent Loop...`);
+        
+        isValid = data.every(row => {
+          return schema.fields.every(field => {
+            const value = row[field.name];
+            if (field.constraints?.nullable === false && (value === null || value === undefined)) {
+              return false;
+            }
+            if (field.constraints?.enum && field.constraints.enum.length > 0 && !field.constraints.enum.includes(value)) {
+              return false;
+            }
+            if (typeof value === 'number') {
+              if (field.constraints?.min !== undefined && value < field.constraints.min) {
+                return false;
+              }
+              if (field.constraints?.max !== undefined && value > field.constraints.max) {
+                return false;
+              }
+            }
+            return true;
+          });
+        });
+
+        if (!isValid && attempts < maxRetries) {
+          console.warn(`Validation failed attempt ${attempts}`);
+          setStatusMessage(`Self-correcting attempt ${attempts}...`);
+        }
       }
 
+      if (!isValid) {
+        throw new Error("Self-correction loop failed to validate data.");
+      }
+
+      setStatusMessage("Finalizing dataset...");
       setGeneratedData(data);
 
-      // Record this generation in history
-      addGenerationToHistory({
+      const dataSize = (new TextEncoder().encode(JSON.stringify(data)).length / 1024);
+      const sizeString = dataSize > 1024 ? `${(dataSize/1024).toFixed(2)} MB` : `${dataSize.toFixed(1)} KB`;
+
+      const record = {
         id: crypto.randomUUID(),
         name: `${schema.tableName} Dataset`,
         tableName: schema.tableName,
         rows: rowCount,
         format: exportFormat,
         timestamp: new Date().toLocaleString(),
-        size: `${(new TextEncoder().encode(JSON.stringify(data)).length / 1024).toFixed(1)} KB`,
-      });
+        size: sizeString,
+      };
+
+      addGenerationToHistory(record);
 
       setProgress(100);
+      setStatusMessage("Generation successful!");
       toast.success(`Generated ${rowCount} rows successfully!`);
-    } catch (error) {
+
+      if (settings.notifyOnComplete && settings.discordWebhook) {
+        api.sendNotification(settings.discordWebhook, {
+          title: "Data Generation Complete",
+          message: `Generated ${rowCount} rows for table '${schema.tableName}'`,
+          details: record
+        }).catch(err => console.error("Webhook failed:", err));
+      }
+    } catch (error: any) {
       console.error("Generation Error:", error);
-      toast.error("Failed to generate data");
+      const message = error?.response?.data?.message || error?.message || "Failed to generate data";
+      
+      let errorMsg = message === "Failed to fetch" ? "Network Error: AI service is unreachable." : message;
+      if (message === "Failed to fetch" && settings.aiProvider === "ollama") {
+        errorMsg = "Ollama is unreachable. Ensure the service is running and OLLAMA_ORIGINS='*' is set.";
+      } else if (message.toLowerCase().includes("not found") && settings.aiProvider === "ollama") {
+        errorMsg = (
+          <div className="space-y-2">
+            <p>Ollama model '{settings.ollamaModel}' not found.</p>
+            <code className="block p-2 bg-black/30 rounded border border-white/10 text-[10px] font-mono">
+              ollama pull {settings.ollamaModel}
+            </code>
+          </div>
+        ) as any;
+      }
+      
+      toast.error(errorMsg);
     } finally {
-      clearInterval(interval);
       setTimeout(() => {
+        setStatusMessage("");
         setIsGenerating(false);
         setProgress(0);
       }, 500);
+    }
+  };
+
+  const handleSeedToDatabase = async () => {
+    if (!generatedData.length) return;
+    setIsSeeding(true);
+    try {
+      const settings = loadFromStorage(STORAGE_KEYS.SETTINGS, { dbType: "sqlite", sqlitePath: "data.sqlite" });
+      await api.seedDatabase(schema!, generatedData, settings);
+      toast.success(`Successfully seeded ${generatedData.length} rows to ${settings.dbType}`);
+    } catch (error: any) {
+      console.error("Seeding Error:", error);
+      let message = error.message || "Failed to seed data";
+      if (message === "Failed to fetch" || error.name === "TypeError") {
+        message = "Network Error: Could not reach the API Gateway. Ensure your backend server is running and configured correctly in Settings.";
+      }
+      toast.error(`Database Error: ${message}`);
+    } finally {
+      setIsSeeding(false);
     }
   };
 
@@ -126,6 +237,9 @@ export function GeneratorPage() {
     let filename: string;
     let mimeType: string;
 
+    const settings = loadFromStorage(STORAGE_KEYS.SETTINGS, { dbType: "postgresql" });
+    const dialect = settings.dbType === "sqlite" ? "sqlite" : "postgresql";
+
     switch (exportFormat) {
       case "csv":
         content = exportToCSV(generatedData);
@@ -138,7 +252,7 @@ export function GeneratorPage() {
         mimeType = "application/json";
         break;
       case "sql":
-        content = exportToSQL(generatedData, schema);
+        content = exportToSQL(generatedData, schema, dialect);
         filename = `${schema.tableName}.sql`;
         mimeType = "text/sql";
         break;
@@ -150,7 +264,6 @@ export function GeneratorPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white">Data Generator</h2>
@@ -167,7 +280,6 @@ export function GeneratorPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Configuration Panel */}
         <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800/50 p-6 lg:col-span-1">
           <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
             <Database className="w-5 h-5 text-purple-400" />
@@ -175,7 +287,6 @@ export function GeneratorPage() {
           </h3>
 
           <div className="space-y-6">
-            {/* Schema Info */}
             {schema && (
               <div className="p-4 bg-gradient-to-r from-purple-500/10 to-cyan-500/10 rounded-lg border border-purple-500/20">
                 <div className="flex items-center justify-between mb-2">
@@ -193,7 +304,6 @@ export function GeneratorPage() {
               </div>
             )}
 
-            {/* Row Count */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="text-slate-300">Number of Rows</Label>
@@ -213,7 +323,6 @@ export function GeneratorPage() {
               </div>
             </div>
 
-            {/* Quick Presets */}
             <div className="space-y-2">
               <Label className="text-slate-300">Quick Presets</Label>
               <div className="grid grid-cols-3 gap-2">
@@ -231,7 +340,6 @@ export function GeneratorPage() {
               </div>
             </div>
 
-            {/* Generate Button */}
             <Button
               onClick={handleGenerate}
               disabled={isGenerating || !schema}
@@ -251,7 +359,6 @@ export function GeneratorPage() {
               )}
             </Button>
 
-            {/* Progress */}
             {isGenerating && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
@@ -259,57 +366,67 @@ export function GeneratorPage() {
                 className="space-y-2"
               >
                 <Progress value={progress} className="h-2" />
-                <p className="text-xs text-slate-400 text-center">{progress}% Complete</p>
+                <div className="flex justify-between items-center text-[10px] uppercase tracking-wider font-semibold">
+                  <span className="text-cyan-400">{statusMessage}</span>
+                  <span className="text-slate-500">{Math.round(progress)}%</span>
+                </div>
               </motion.div>
             )}
 
-            {/* Export Section */}
-            {generatedData.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-3 pt-4 border-t border-slate-800"
-              >
-                <Label className="text-slate-300">Export Format</Label>
-                <Tabs value={exportFormat} onValueChange={(v) => setExportFormat(v as any)}>
-                  <TabsList className="grid grid-cols-3 bg-slate-800/50">
-                    <TabsTrigger value="csv">CSV</TabsTrigger>
-                    <TabsTrigger value="json">JSON</TabsTrigger>
-                    <TabsTrigger value="sql">SQL</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-
-                <Button
-                  onClick={handleExport}
-                  variant="outline"
-                  className="w-full border-slate-700 hover:bg-slate-800/50"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Export {exportFormat.toUpperCase()}
-                </Button>
-              </motion.div>
-            )}
           </div>
         </Card>
 
-        {/* Data Preview */}
         <Card className="bg-slate-900/50 backdrop-blur-xl border-slate-800/50 p-6 lg:col-span-2">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-              <FileJson className="w-5 h-5 text-cyan-400" />
-              Data Preview
-            </h3>
-            {generatedData.length > 0 && (
+            <div className="flex items-center gap-4">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <FileJson className="w-5 h-5 text-cyan-400" />
+                Data Preview
+              </h3>
+              {generatedData.length > 0 && (
+                 <Tabs value={exportFormat} onValueChange={(v) => setExportFormat(v as any)} className="w-48">
+                    <TabsList className="grid grid-cols-3 bg-slate-800/50 h-8">
+                      <TabsTrigger value="csv" className="text-[10px]">CSV</TabsTrigger>
+                      <TabsTrigger value="json" className="text-[10px]">JSON</TabsTrigger>
+                      <TabsTrigger value="sql" className="text-[10px]">SQL</TabsTrigger>
+                    </TabsList>
+                 </Tabs>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {generatedData.length > 0 && (
+                <>
+                  <Button
+                    onClick={handleExport}
+                    variant="outline"
+                    size="sm"
+                    className="border-slate-700 hover:bg-slate-800/50 h-8 text-xs"
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                    Export
+                  </Button>
+                  <Button
+                    onClick={handleSeedToDatabase}
+                    disabled={isSeeding}
+                    size="sm"
+                    className="bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20 h-8 text-xs"
+                  >
+                    {isSeeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DatabaseZap className="w-3.5 h-3.5 mr-1.5" />}
+                    Seed DB
+                  </Button>
+                </>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleGenerate}
-                className="hover:bg-slate-800/50"
+                disabled={isGenerating || !schema}
+                className="hover:bg-slate-800/50 h-8 text-xs"
               >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Regenerate
+                <RefreshCw className={cn("w-3.5 h-3.5 mr-1.5", isGenerating && "animate-spin")} />
+                {generatedData.length > 0 ? "Regenerate" : "Generate"}
               </Button>
-            )}
+            </div>
           </div>
 
           {generatedData.length === 0 ? (
