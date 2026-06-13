@@ -39,7 +39,7 @@ export function SettingsPage() {
     pgUser: import.meta.env.VITE_PG_USER || "postgres",
     pgPassword: import.meta.env.VITE_PG_PASSWORD || "StrongPassword123",
     pgSsl: import.meta.env.VITE_PG_SSL === "true", 
-    apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "/api/db", // Default to Vercel Serverless Function endpoint
+    apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "", // Default to relative root for Serverless Functions
 
     aiProvider: "gemini",
 
@@ -210,7 +210,7 @@ export function SettingsPage() {
                           toast.success("Gateway Reachable (Database pending config)");
                         }
                       } else {
-                        const msg = `Vercel Serverless Function unreachable at ${settings.apiBaseUrl}. Check Vercel deployment logs.`;
+                        const msg = `Gateway unreachable at ${settings.apiBaseUrl || '(relative root)'}. Ensure the Serverless Function is deployed to /api/db.`;
                         toast.error(msg);
                       }
                     }}

@@ -23,9 +23,9 @@ const getApiBaseUrl = () => {
 
 export const api = {
   async testDatabaseConnection(config: any, signal?: AbortSignal) {
-    // When using Vercel Serverless Functions, the API base URL is relative
-    const baseUrl = sanitizeUrl(config?.apiBaseUrl || ''); // Use empty string as base, will be '/api/db'
-    const endpoint = `${baseUrl}/api/db/test`; // This will resolve to /api/db/test on Vercel
+    const baseUrl = sanitizeUrl(config?.apiBaseUrl || '');
+    // Prevent double-pathing if baseUrl already includes /api/db (common for Vercel relative paths)
+    const endpoint = baseUrl.startsWith('/api/db') ? `${baseUrl}/test` : `${baseUrl}/api/db/test`;
     
     console.log(`[API] Testing DB connection via gateway at: ${endpoint}`);
     const response = await fetch(endpoint, {
@@ -34,7 +34,7 @@ export const api = {
       body: JSON.stringify(config),
       signal,
     }).catch(err => {
-      throw new Error(`Gateway Unreachable. Browser cannot connect to ${baseUrl}. Check AWS Port 3000 and CORS.`);
+      throw new Error(`Gateway Unreachable. Ensure your Backend Gateway is running and CORS is enabled. Error: ${err.message}`);
     });
     
     if (!response.ok) {
@@ -136,11 +136,10 @@ export const api = {
   },
 
   async queryDatabase(sql: string, settings: any) {
-    // When using Vercel Serverless Functions, the API base URL is relative
     const baseUrl = sanitizeUrl(settings?.apiBaseUrl || '');
-    // The endpoint will be /api/db/query on Vercel
+    const endpoint = baseUrl.startsWith('/api/db') ? `${baseUrl}/query` : `${baseUrl}/api/db/query`;
 
-    const response = await fetch(`${baseUrl}/api/db/query`, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sql, config: settings }),
@@ -148,9 +147,8 @@ export const api = {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const status = response.status === 404 ? "Not Found (Check Gateway Routes)" : response.statusText;
-      console.error(`[API] Query failed at ${baseUrl}/api/db/query:`, errorData);
-      console.error(`[API] Query failed at ${baseUrl}/api/db/query [${response.status}]:`, errorData);
-      throw new Error(errorData.message || errorData.error || `Query failed: ${response.statusText}`);
+      console.error(`[API] Query failed at ${endpoint} [${response.status}]:`, errorData);
+      throw new Error(errorData.message || errorData.error || `Query failed: ${status}`);
     }
     return response.json();
   },
