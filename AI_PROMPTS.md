@@ -17,7 +17,7 @@ Create a Data Engineering Mock-Data Generator Agent with:
 - Schema input (DDL or YAML)
 - Generate N rows of realistic data
 - AI-powered generation using Faker/LLM
-- Export to CSV/SQL/JSON
+- Export to CSV/SQL/JSON (Vercel compatible)
 - Advanced UI/UX with graphical theme
 - Multi-page navigation
 ```

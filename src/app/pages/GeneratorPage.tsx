@@ -218,7 +218,7 @@ export function GeneratorPage() {
     try {
       const settings = loadFromStorage(STORAGE_KEYS.SETTINGS, { dbType: "postgresql" });
       await api.seedDatabase(schema!, targetData, settings);
-      toast.success(`Successfully seeded ${targetData.length} rows to ${settings.dbType}`);
+      toast.success(`Successfully saved ${targetData.length} rows to Neon Database!`);
     } catch (error: any) {
       console.error("Seeding Error:", error);
       let message = error.message || "Failed to seed data";
@@ -348,7 +348,7 @@ export function GeneratorPage() {
                 <div className="flex items-center gap-2">
                   <Cloud className="w-4 h-4 text-purple-400" />
                   <div>
-                    <p className="text-xs font-bold text-white uppercase tracking-wider">Direct to EC2</p>
+                    <p className="text-xs font-bold text-white uppercase tracking-wider">Direct to Database</p>
                     <p className="text-[10px] text-slate-500">Auto-save after generation</p>
                   </div>
                 </div>

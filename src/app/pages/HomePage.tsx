@@ -36,7 +36,7 @@ const features = [
   {
     icon: Sparkles,
     title: "AI-Powered Generation",
-    description: "Leverage advanced AI models to generate contextually relevant, realistic data",
+    description: "Leverage Google Gemini AI to generate contextually relevant, realistic data",
   },
   {
     icon: Shield,

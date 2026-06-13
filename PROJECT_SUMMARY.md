@@ -71,11 +71,10 @@
 
 | Service | Status | Configuration |
 |---------|--------|---------------|
-| PostgreSQL | ✅ Active | EC2 + Docker Production Environment (Port 5432 Open) |
-| SQLite | ✅ Default | In-browser support |
-| Google Gemini AI | ✅ Primary | Cloud-based AI generation |
+| PostgreSQL | ✅ Active | Neon.tech Cloud Environment |
+| Neon PostgreSQL | ✅ Active | Cloud-based, Vercel Serverless Function compatible |
+| Google Gemini AI | ✅ Primary | Cloud-based AI generation (Vercel compatible) |
 | Discord | ✅ Configured | Webhook notifications |
-
 ---
 
 ## 📁 Project Structure
@@ -302,17 +301,13 @@ font-family: system-ui, -apple-system, sans-serif
    - Consistent seeding (future)
 
 2. **PostgreSQL** (Configured)
-   - Docker deployment
+   - Neon.tech integration
+   - Vercel Serverless Function as secure gateway
    - Connection pooling (future)
-   - Direct database seeding (future)
+   - Direct database seeding
 
-3. **Ollama** (Configured)
-   - Local AI model execution
-   - Privacy-focused
-   - No API costs
-
-4. **OpenAI** (Configured)
-   - GPT-4 integration ready
+3. **Google Gemini AI** (Configured)
+   - Cloud-based AI model execution
    - API key management
    - Cost tracking (future)
 
@@ -410,8 +405,8 @@ font-family: system-ui, -apple-system, sans-serif
 | Requirement | Status | Implementation |
 |-------------|--------|----------------|
 | SQLite Support | ✅ | Default database, in-browser ready |
-| PostgreSQL Support | ✅ | Docker setup, connection config |
-| Ollama Integration | ✅ | Settings configured, ready to use |
+| PostgreSQL Support | ✅ | Neon.tech via Vercel Serverless Function |
+| Gemini AI Integration | ✅ | Settings configured, ready to use |
 | Free LLM Tiers | ✅ | OpenAI API support configured |
 | Public APIs | ✅ | Faker.js, PapaParse, SQL Formatter |
 | CSV Export | ✅ | Full implementation with headers |

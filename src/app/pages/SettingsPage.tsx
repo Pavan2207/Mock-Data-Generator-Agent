@@ -20,7 +20,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Terminal,
+  FileCode,
   Container,
+  Cloud,
   Info,
   X,
   BookOpen,
@@ -33,13 +35,14 @@ import { api } from "../lib/api";
 export function SettingsPage() {
   const defaultSettings = {
     dbType: "postgresql",
-    pgHost: import.meta.env.VITE_PG_HOST || "localhost",
+    sqlitePath: "data/mock.db",
+    pgHost: import.meta.env.VITE_PG_HOST || "ep-cool-bread-atdv1bo1-pooler.c-9.us-east-1.aws.neon.tech", // Default to Neon host
     pgPort: import.meta.env.VITE_PG_PORT || "5432",
-    pgDatabase: import.meta.env.VITE_PG_DATABASE || "mock",
-    pgUser: import.meta.env.VITE_PG_USER || "postgres",
-    pgPassword: import.meta.env.VITE_PG_PASSWORD || "StrongPassword123",
-    pgSsl: import.meta.env.VITE_PG_SSL === "true", 
-    apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "", // Default to relative root for Serverless Functions
+    pgDatabase: import.meta.env.VITE_PG_DATABASE || "neondb", // Default to Neon database
+    pgUser: import.meta.env.VITE_PG_USER || "neondb_owner", // Default to Neon user
+    pgPassword: import.meta.env.VITE_PG_PASSWORD || "npg_w1gaoATtI3uj",
+    pgSsl: import.meta.env.VITE_PG_SSL !== "true", // Default to true for Neon
+    apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "/api/db", // Vercel Serverless Function endpoint
 
     aiProvider: "gemini",
 
@@ -99,7 +102,11 @@ export function SettingsPage() {
     const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     try {
-      await api.testDatabaseConnection(settings, controller.signal);
+      await api.testDatabaseConnection({ 
+        ...settings, 
+        apiBaseUrl: settings.apiBaseUrl,
+        dbType: settings.dbType 
+      }, controller.signal); 
       setConnectionStatus("success");
       toast.success("Connection successful!");
     } catch (error: any) {
@@ -110,7 +117,7 @@ export function SettingsPage() {
       if (error.name === 'AbortError') {
         message = "Connection timed out. The server took too long to respond (8s).";
       } else if (message.includes("Gateway Unreachable") || message === "Failed to fetch" || error.name === "TypeError") {
-        const displayUrl = settings.apiBaseUrl || "/api/db (relative)";
+        const displayUrl = "/api/db"; // Always display the Vercel function path
         message = `Network Error: Vercel Serverless Function unreachable at ${displayUrl}. Ensure the function is deployed at /api/db/ and healthy.`;
       }
       
@@ -172,78 +179,56 @@ export function SettingsPage() {
             </div>
 
             <div className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="apiBaseUrl">Backend API Gateway</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="apiBaseUrl"
-                    value={settings.apiBaseUrl}
-                    onChange={(e) =>
-                      setSettings({ 
-                        ...settings, 
-                        apiBaseUrl: e.target.value
-                          .trim()
-                          .replace(/[.,;/\s]+$/, "") 
-                          .replace(/\/health$/, "") 
-                      }) 
-                    }
-                    placeholder="/api/db" // Placeholder for Vercel Serverless Function
-                    className={cn(
-                      "bg-slate-950/50 border-slate-700",
-                      settings.apiBaseUrl.includes('localhost') && "border-yellow-500/30",
-                      apiBaseUrlWarning && "border-red-500/30" // Highlight if there's a warning
-                    )}
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-xs border-slate-700 h-9 px-4"
-                    onClick={async () => {
-                      const controller = new AbortController();
-                      const timeoutId = setTimeout(() => controller.abort(), 5000);
-                      const data = await api.checkAiStatus("gateway", settings.apiBaseUrl, undefined, controller.signal);
-                      clearTimeout(timeoutId);
-                      
-                      if (data && data.status === 'ok') {
-                        if (data.database === 'connected') {
-                          toast.success("Gateway Reachable & Database Connected!");
-                        } else {
-                          toast.success("Gateway Reachable (Database pending config)");
-                        }
-                      } else {
-                        const msg = `Gateway unreachable at ${settings.apiBaseUrl || '(relative root)'}. Ensure the Serverless Function is deployed to /api/db.`;
-                        toast.error(msg);
-                      }
-                    }}
-                  >
-                    Test Gateway
-                  </Button>
-                </div>
-                
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">
-                  The target server for real SQL execution and seeding
-                </p>
-                {apiBaseUrlWarning && (
-                  <div className="flex items-center gap-1 text-red-400 text-xs mt-1">
-                    <AlertCircle className="w-3 h-3" /> {apiBaseUrlWarning}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-500 uppercase tracking-widest text-[10px] font-bold">Database Engine</Label>
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-green-500/10 border border-green-500/20 rounded-full">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                    <span className="text-[10px] text-green-400 font-medium tracking-tight">System Ready</span>
                   </div>
-                )}
-              </div>
-
-              {settings.pgPort === "3000" && (
-                <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-center gap-2 text-yellow-500 text-xs">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>
-                    <strong>Configuration Conflict:</strong> Your PostgreSQL port is set to 3000, which is the same as your Gateway. 
-                    Database usually runs on <strong>5432</strong>.
-                  </span>
                 </div>
-              )}
+
+                <div className="grid grid-cols-2 p-1 bg-slate-950/50 border border-slate-800 rounded-xl">
+                  <button
+                    onClick={() => setSettings({ ...settings, dbType: "postgresql" })}
+                    className={cn(
+                      "flex items-center justify-center gap-2 py-2.5 text-xs font-semibold rounded-lg transition-all duration-200",
+                      settings.dbType === "postgresql"
+                        ? "bg-purple-500/20 text-purple-400 shadow-lg shadow-purple-500/10 border border-purple-500/30"
+                        : "text-slate-500 hover:text-slate-400 hover:bg-slate-800/50"
+                    )}
+                  >
+                    <Database className="w-4 h-4" />
+                    PostgreSQL
+                  </button>
+                  <button
+                    onClick={() => setSettings({ ...settings, dbType: "sqlite" })}
+                    className={cn(
+                      "flex items-center justify-center gap-2 py-2.5 text-xs font-semibold rounded-lg transition-all duration-200",
+                      settings.dbType === "sqlite"
+                        ? "bg-blue-500/20 text-blue-400 shadow-lg shadow-blue-500/10 border border-blue-500/30"
+                        : "text-slate-500 hover:text-slate-400 hover:bg-slate-800/50"
+                    )}
+                  >
+                    <FileCode className="w-4 h-4" />
+                    SQLite
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 px-1">
+                  <Globe className="w-3 h-3 text-slate-600" />
+                  <p className="text-[10px] text-slate-500 tracking-tight">Proxy Gateway: <span className="text-slate-400 font-mono underline decoration-slate-800 underline-offset-4">{settings.apiBaseUrl}</span></p>
+                </div>
+              </div>
 
               <Separator className="bg-slate-800" />
 
               <div className="flex justify-between items-center">
-                 <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">PostgreSQL (Cloud & Docker)</Badge>
+                 <Badge className={cn(
+                    "border-transparent",
+                    settings.dbType === 'postgresql' ? "bg-purple-500/10 text-purple-400" : "bg-blue-500/10 text-blue-400"
+                 )}>
+                    {settings.dbType === 'postgresql' ? 'Neon / PostgreSQL' : 'Local / SQLite'}
+                 </Badge>
                  <Button
                     onClick={testConnection}
                     disabled={isConnecting}
@@ -288,324 +273,166 @@ export function SettingsPage() {
                   <div className="space-y-2">
                     <Label htmlFor="pgDatabase">Database Name</Label>
                     <Input
-                      id="pgDatabase"
-                      value={settings.pgDatabase}
-                      onChange={(e) =>
-                        setSettings({ ...settings, pgDatabase: e.target.value })
-                      }
-                      className="bg-slate-950/50 border-slate-700"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="pgUser">User</Label>
-                      <Input
-                        id="pgUser"
-                        value={settings.pgUser}
+                        id="pgDatabase"
+                        value={settings.pgDatabase}
                         onChange={(e) =>
-                          setSettings({ ...settings, pgUser: e.target.value })
+                          setSettings({ ...settings, pgDatabase: e.target.value })
                         }
                         className="bg-slate-950/50 border-slate-700"
                       />
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="pgUser">User</Label>
+                        <Input
+                          id="pgUser"
+                          value={settings.pgUser}
+                          onChange={(e) =>
+                            setSettings({ ...settings, pgUser: e.target.value })
+                          }
+                          className="bg-slate-950/50 border-slate-700"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="pgPassword">Password</Label>
+                        <Input
+                          id="pgPassword"
+                          type="password"
+                          value={settings.pgPassword}
+                          onChange={(e) =>
+                            setSettings({ ...settings, pgPassword: e.target.value })
+                          }
+                          className="bg-slate-950/50 border-slate-700"
+                        />
+                      </div>
+                    </div>
+
                     <div className="space-y-2">
-                      <Label htmlFor="pgPassword">Password</Label>
-                      <Input
-                        id="pgPassword"
-                        type="password"
-                        value={settings.pgPassword}
-                        onChange={(e) =>
-                          setSettings({ ...settings, pgPassword: e.target.value })
-                        }
-                        className="bg-slate-950/50 border-slate-700"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs text-slate-500 uppercase tracking-wider">Internal Connection String Preview</Label>
-                    <div className="p-3 bg-slate-950 rounded border border-slate-800 font-mono text-[10px] text-slate-400 break-all">
-                      postgresql://{settings.pgUser}:****@{settings.pgHost}:{settings.pgPort}/{settings.pgDatabase}{settings.pgSsl ? '?sslmode=require' : ''}
-                    </div>
-                    <p className="text-[10px] text-slate-500 italic">
-                      This string is sent to your local API Gateway for execution.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <p className="font-medium text-white">Enable SSL</p>
-                      <p className="text-sm text-slate-400">
-                        Required for cloud databases like Neon.
+                      <Label className="text-xs text-slate-500 uppercase tracking-wider">Internal Connection String Preview</Label>
+                      <div className="p-3 bg-slate-950 rounded border border-slate-800 font-mono text-[10px] text-slate-400 break-all">
+                        postgresql://{settings.pgUser}:****@{settings.pgHost}:{settings.pgPort}/{settings.pgDatabase}{settings.pgSsl ? '?sslmode=require' : ''}
+                      </div>
+                      <p className="text-[10px] text-slate-500 italic">
+                        This string is sent to your Vercel Serverless Function for execution.
                       </p>
                     </div>
-                    <Switch
-                      checked={settings.pgSsl}
-                      onCheckedChange={(checked) =>
-                        setSettings({ ...settings, pgSsl: checked })
-                      }
-                    />
-                  </div>
-                </motion.div>
-              )}
 
-              <AnimatePresence>
-                {showTroubleshooting && (
+                    <div className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
+                      <div>
+                        <p className="font-medium text-white">Enable SSL</p>
+                        <p className="text-sm text-slate-400">
+                          Required for cloud databases like Neon.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={settings.pgSsl}
+                        onCheckedChange={(checked) =>
+                          setSettings({ ...settings, pgSsl: checked })
+                        }
+                      />
+                    </div>
+                  </motion.div>
+                )}
+
+                {settings.dbType === "sqlite" && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-4 text-xs overflow-hidden"
+                    className="space-y-4"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-purple-400 font-bold uppercase tracking-wider">
-                        <Terminal className="w-3.5 h-3.5" />
-                        PostgreSQL Gateway Guide
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-6 w-6 p-0 hover:bg-slate-800"
-                        onClick={() => setShowTroubleshooting(false)}
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-slate-300 font-semibold mb-1 flex items-center gap-1">
-                          <Info className="w-3 h-3" /> 1. Create Gateway File
-                        </p>
-                        <p className="text-slate-500 mb-2">Save this as <code className="text-purple-400">gateway.js</code> and run <code className="text-cyan-400">node gateway.js</code></p>
-                        <div className="relative group">
-                          <pre className="p-3 bg-slate-900 rounded border border-slate-800 text-slate-400 font-mono text-[9px] overflow-x-auto max-h-48">
-{`const express = require('express');
-const cors = require('cors');
-const { Pool } = require('pg');
-const app = express();
-
-app.use(cors()); 
-app.use(express.json());
-
-// Request Logging for easier debugging
-app.use((req, res, next) => {
-  console.log(\`[\${new Date().toISOString()}] \${req.method} \${req.url}\`);
-  next();
-});
-
-// Shared connection pool logic
-const getPool = (c) => {
-  if (!c || !c.pgHost) return null;
-  return new Pool({
-  host: c.pgHost, port: c.pgPort, user: c.pgUser,
-  password: c.pgPassword, database: c.pgDatabase,
-  ssl: c.pgSsl ? { rejectUnauthorized: false } : false
-  });
-};
-
-// Test database connection (supports both prefixed and non-prefixed routes)
-app.post(['/api/db/test', '/db/test'], async (req, res) => {
-  try {
-    const p = getPool(req.body);
-    if (!p) return res.status(400).json({ success: false, message: 'Missing database configuration' });
-    const r = await p.query('SELECT NOW()'); 
-    await p.end();
-    res.json({ success: true, message: 'Connected successfully!', time: r.rows[0].now });
-  } catch (e) {
-    console.error('[Gateway] DB Test Error:', e.message);
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-// Execute raw SQL
-app.post(['/api/db/query', '/db/query'], async (req, res) => {
-  const p = getPool(req.body.config);
-  try { 
-    const result = await p.query(req.body.sql); 
-    res.json({ success: true, rows: result.rows, rowCount: result.rowCount }); 
-  }
-  catch (e) { res.status(500).json({ message: e.message }); } finally { await p.end(); }
-});
-
-// In-memory history store (for demo purposes)
-let generationHistory = [];
-
-// Seed data into table
-app.post(['/api/db/seed', '/db/seed'], async (req, res) => {
-  const { schema, data, config } = req.body;
-  if (!schema || !data) return res.status(400).json({ message: 'Missing schema or data' });
-  
-  const p = getPool(config);
-  if (!p) return res.status(400).json({ message: 'Invalid config' });
-  try {
-    const client = await p.connect();
-    const cols = schema.fields.map(f => '"' + f.name + '"').join(', ');
-    const values = data.map(row => '(' + schema.fields.map(f => {
-      const v = row[f.name];
-      if (v === null || v === undefined) return 'NULL';
-      if (typeof v === 'string') return "'" + v.replace(/'/g, "''") + "'";
-      return v;
-    }).join(', ') + ')').join(', ');
-    await client.query(\`INSERT INTO "\${schema.tableName}" (\${cols}) VALUES \${values}\`);
-    client.release();
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ message: e.message }); } finally { await p.end(); }
-});
-
-// History Endpoints
-app.get(['/api/history', '/history'], (req, res) => res.json(generationHistory));
-app.post(['/api/history', '/history'], (req, res) => {
-  generationHistory.unshift(req.body);
-  if (generationHistory.length > 50) generationHistory = generationHistory.slice(0, 50);
-  res.json({ success: true });
-});
-
-// Server-side Generation Mock
-app.post(['/api/generate', '/generate'], (req, res) => res.status(501).json({ message: 'Use local faker engine for performance' }));
-
-// Simple status check for the gateway itself
-app.get(['/api/db/status', '/db/status'], (req, res) => res.json({ status: 'ok', message: 'Gateway Operational' }));
-
-app.get('/health', async (req, res) => { 
-  const p = getPool(req.query); 
-  if (!p) return res.json({ status: 'ok', database: 'not_configured' });
-  try {
-    await p.query('SELECT NOW()');
-    res.json({ status: 'ok', database: 'connected', time: new Date() });
-  } catch (e) {
-    res.status(500).json({ status: 'error', database: 'disconnected', message: e.message });
-  } finally {
-    if (p) await p.end();
-  }
-});
-
-app.get(['/api/ai/status', '/ai/status'], (req, res) => res.json({ status: 'ok', message: 'Gateway operational' })); 
-
-// Catch-all for undefined routes
-app.use((req, res) => {
-  console.warn(\`[Gateway] 404 - Not Found: \${req.method} \${req.url}\`);
-  res.status(404).json({ status: 'error', message: 'Route not found on gateway' });
-});
-
-app.listen(3000, '0.0.0.0', () => console.log('Gateway running on port 3000 (Global Access Enabled)'));`}
-                          </pre>
-                        </div>
-                      </div>
-
-                      <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                        <p className="text-purple-400 font-bold mb-1 flex items-center gap-1 text-[10px] uppercase">
-                          <Cloud className="w-3 h-3" /> Vercel Serverless Gateway
-                        </p>
-                        <div className="space-y-1 text-slate-400 leading-relaxed">
-                          <p>1. Deploy your frontend to Vercel.</p>
-                          <p>2. Create a Vercel Serverless Function (e.g., <code className="text-cyan-400">/api/db/[...path].ts</code>) to act as your database gateway.</p>
-                          <p>3. Configure PostgreSQL credentials as <b className="text-white">Environment Variables</b> in your Vercel project (e.g., <code className="text-cyan-400">PG_HOST</code>, <code className="text-cyan-400">PG_USER</code>).</p>
-                          <p>4. The frontend will automatically call this Vercel Serverless Function over HTTPS.</p>
-                        </div>
-                      </div>
-
-                      <div className="pt-2">
-                         <p className="text-slate-300 font-semibold mb-1 flex items-center gap-1">
-                           <Container className="w-3 h-3" /> 2. Docker Compose Setup (EC2)
-                         </p>
-                         <p className="text-slate-500 mb-2">Run both DB and Gateway with one command:</p>
-                         <pre className="p-3 bg-slate-900 rounded border border-slate-800 text-slate-400 font-mono text-[9px] overflow-x-auto max-h-48">
-{`version: '3.8'
-services:
-  postgres-db:
-    image: postgres:16
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: mock
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: StrongPassword123
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-
-  api-gateway:
-    image: node:18-alpine
-    command: sh -c "npm install express cors pg && node gateway.js"
-    ports:
-      - "3000:3000"
-    volumes:
-      - .:/app
-    working_dir: /app
-volumes:
-  pg_data:`}
-                         </pre>
-                      </div>
-
-                      <div>
-                        <p className="text-slate-300 font-semibold mb-1 flex items-center gap-1">
-                          <Terminal className="w-3 h-3" /> 2. Test API Gateway
-                        </p>
-                        <p className="text-slate-500 mb-2">Run this on your EC2 instance to verify connection:</p>
-                        <code className="block p-2 bg-slate-900 rounded border border-slate-800 text-cyan-400 font-mono text-[9px]">
-                          curl http://localhost:3000/health
-                        </code>
-                        <p className="text-[9px] text-slate-500 mt-1 italic">Expected: {`{"status":"ok","database":"connected",...}`}</p>
-                      </div>
-
-                      <div>
-                        <p className="text-slate-300 font-semibold mb-1 flex items-center gap-1">
-                          <Save className="w-3 h-3" /> 3. Keep Gateway Running (PM2)
-                        </p>
-                        <p className="text-slate-500 mb-2">Install PM2 and start your gateway persistently:</p>
-                        <code className="block p-2 bg-slate-900 rounded border border-slate-800 text-cyan-400 font-mono text-[9px]">
-                          npm install -g pm2<br/>
-                          pm2 start gateway.js --name dataforge-gateway<br/>
-                          pm2 save<br/>
-                          pm2 status
-                        </code>
-                      </div>
-
-                      <div className="pt-2">
-                         <p className="text-slate-500 mb-1 text-[10px]">Install required libraries:</p>
-                         <code className="block p-2 bg-slate-900 rounded border border-slate-800 text-slate-400 font-mono text-[10px]">
-                           npm install express cors pg
-                         </code>
+                    <Separator className="bg-slate-800" />
+                    <div className="space-y-2">
+                      <Label htmlFor="sqlitePath">Database File Path</Label>
+                      <div className="relative">
+                        <FileCode className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                        <Input
+                          id="sqlitePath"
+                          value={settings.sqlitePath}
+                          onChange={(e) =>
+                            setSettings({ ...settings, sqlitePath: e.target.value })
+                          }
+                          className="bg-slate-950/50 border-slate-700 pl-10 font-mono text-sm"
+                          placeholder="e.g., data/storage.db"
+                        />
                       </div>
                     </div>
                   </motion.div>
                 )}
-              </AnimatePresence>
 
-              {connectionStatus === "success" && (
-                <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-                  <CheckCircle2 className="w-4 h-4 text-green-400" />
-                  <span className="text-sm text-green-400">Connected successfully!</span>
-                </div>
-              )}
+                {connectionStatus === "success" && (
+                  <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                    <CheckCircle2 className="w-4 h-4 text-green-400" />
+                    <span className="text-sm text-green-400">Connected successfully!</span>
+                  </div>
+                )}
 
-              {connectionStatus === "error" && (
-                <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                  <AlertCircle className="w-4 h-4 text-red-400" />
-                  <span className="text-sm text-red-400">{connectionError}</span>
-                </div>
-              )}
+                {connectionStatus === "error" && (
+                  <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-400" />
+                    <span className="text-sm text-red-400">{connectionError}</span>
+                  </div>
+                )}
 
-              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <Shield className="w-4 h-4 text-purple-400 mt-0.5" />
-                  <div className="text-sm text-purple-400">
-                    <p className="font-medium mb-1">Production SQL Bridge Required</p>
-                    <p className="text-purple-300/80">
-                      To connect to Neon or Docker, you <b>must</b> run a local Node.js proxy server. Browsers cannot talk to PostgreSQL directly due to security sandboxing.
-                    </p>
-                    <Button 
-                      variant="link" 
-                      className="text-purple-400 p-0 h-auto text-xs mt-2 underline"
-                      onClick={() => setShowTroubleshooting(true)}
-                    >
-                      View Gateway Setup Guide
-                    </Button>
+                <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <Shield className="w-4 h-4 text-purple-400 mt-0.5" />
+                    <div className="text-sm text-purple-400">
+                      <p className="font-medium mb-1">Production SQL Bridge Required</p>
+                      <p className="text-purple-300/80">
+                        Browsers cannot talk to PostgreSQL directly due to security sandboxing. 
+                        DataForge AI uses a Vercel Serverless Function as a secure bridge.
+                      </p>
+                      <Button 
+                        variant="link" 
+                        className="text-purple-400 p-0 h-auto text-xs mt-2 underline"
+                        onClick={() => setShowTroubleshooting(true)}
+                      >
+                        View Serverless Function Guide
+                      </Button>
+                    </div>
                   </div>
                 </div>
+
+                <AnimatePresence>
+                  {showTroubleshooting && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-4 text-xs overflow-hidden"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-purple-400 font-bold uppercase tracking-wider">
+                          <Terminal className="w-3.5 h-3.5" />
+                          Vercel Serverless Function Setup
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 w-6 p-0 hover:bg-slate-800"
+                          onClick={() => setShowTroubleshooting(false)}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                          <p className="text-cyan-400 font-bold mb-1 flex items-center gap-1 text-[10px] uppercase">
+                            <Cloud className="w-3 h-3" /> Vercel Serverless Gateway
+                          </p>
+                          <div className="space-y-1 text-slate-400 leading-relaxed">
+                            <p>1. Ensure your Serverless Function is located at <code className="text-cyan-400">api/db/[...path].ts</code> in your project root.</p>
+                            <p>2. Configure PostgreSQL credentials as <b className="text-white">Environment Variables</b> in your Vercel project (e.g., <code className="text-cyan-400">PG_HOST</code>, <code className="text-cyan-400">PG_USER</code>, <code className="text-cyan-400">PG_PASSWORD</code>).</p>
+                            <p>3. The frontend will automatically call this Vercel Serverless Function over HTTPS.</p>
+                            <p>4. Install the <code className="text-cyan-400">pg</code> and <code className="text-cyan-400">@vercel/node</code> packages as dependencies.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-            </div>
           </Card>
 
           <Card className={cn("bg-slate-900/50 backdrop-blur-xl border-slate-800/50 p-6", activeTab !== "AI Models" && "hidden")}>

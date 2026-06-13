@@ -59,6 +59,7 @@ DataForge AI uses a Vercel Serverless Function to bridge the frontend to your Po
    - `PG_PASSWORD`: Your database password
    - `PG_DATABASE`: Your database name
    - `PG_PORT`: 5432
+   - `PG_PORT`: 5432
    - `PG_SSL`: `true` or `false`
 
 **Updating Changes:**

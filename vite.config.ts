@@ -35,7 +35,7 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router'],
           charts: ['recharts'],
-          faker: ['@faker-js/faker'],
+          // faker: ['@faker-js/faker'], // Faker is now directly imported
           ui: [
             '@radix-ui/react-dialog',
             '@radix-ui/react-dropdown-menu',

@@ -167,7 +167,7 @@ export function SchemaEditorPage() {
       const settings = loadFromStorage(STORAGE_KEYS.SETTINGS, {});
       await api.queryDatabase(ddlInput, settings);
       toast.success(`SQL executed successfully! Check your database.`);
-    } catch (error: any) {
+    } catch (error: any) { // The error message from the Vercel function will be more specific now
       toast.error(`Database Error: ${error.message || "Failed to execute SQL"}`);
     } finally {
       setIsExecutingSQL(false);

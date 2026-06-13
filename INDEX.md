@@ -356,8 +356,7 @@ dataforge-ai/
 
 ### Integration Services
 
-- [PostgreSQL](https://postgresql.org) - Database
-- [Ollama](https://ollama.com) - Local AI
+- [Neon.tech](https://neon.tech) - Serverless PostgreSQL
 - [OpenAI](https://platform.openai.com) - Cloud AI
 - [Discord Webhooks](https://discord.com/developers/docs/resources/webhook) - Notifications
 

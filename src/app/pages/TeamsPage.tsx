@@ -6,7 +6,7 @@ import { Users, Mail, Github, Linkedin, ShieldCheck } from "lucide-react";
 const teamMembers = [
   { id: "23u41a4236", name: "Malla Hemanjali", role: "Lead Developer" },
   { id: "23U41A0544", name: "Pentakota Charishma", role: "AI Engineer" },
-  { id: "23U41A0541", name: "PADALA KULADEEP SATYA KISHORE", role: "Database Architect" },
+  { id: "23U41A0541", name: "Padala Kuladeep Satya Kishore", role: "Database Architect" },
   { id: "24u45a0419", name: "MADISA THANU SRI", role: "UI/UX Designer" },
 ];
 

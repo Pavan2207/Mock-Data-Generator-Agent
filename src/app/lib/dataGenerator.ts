@@ -1,4 +1,4 @@
-import type { Faker } from "@faker-js/faker";
+import { faker, type Faker } from "@faker-js/faker";
 
 export interface SchemaField {
   name: string;
@@ -181,7 +181,7 @@ function createFieldGenerator(field: SchemaField, fakerInstance: Faker): () => a
 
 export async function generateMockData(schema: Schema, rowCount: number): Promise<any[]> {
   // Dynamically load faker only when needed
-  const { faker } = await import("@faker-js/faker");
+  // const { faker } = await import("@faker-js/faker"); // Faker is now directly imported
 
   // 1. Pre-resolve generators and metadata outside the loop
   const fieldGenerators = schema.fields.map(field => ({

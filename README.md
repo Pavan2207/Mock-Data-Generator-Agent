@@ -25,7 +25,7 @@ DataForge AI is an advanced mock data generation agent designed for data enginee
 - 📊 **Schema-Aware:** Respects constraints, types, relationships, and business logic
 - 🎨 **Beautiful UI/UX:** Modern dark theme with glassmorphism, animations, and gradients
 - 📦 **Multi-Format Export:** CSV, JSON, and SQL with one click
-- 🔌 **Integration Ready:** PostgreSQL, SQLite, Google Gemini AI, Discord webhooks
+- 🔌 **Integration Ready:** PostgreSQL (Neon), Google Gemini AI, Discord webhooks
 - 📈 **Analytics Dashboard:** Track generation history, trends, and statistics
 
 ---
@@ -98,7 +98,7 @@ DataForge AI is an advanced mock data generation agent designed for data enginee
 ### Integrations
 - **PostgreSQL** - Production database
 - **SQLite** - Lightweight database
-- **Google Gemini AI** - Primary AI generation engine
+- **Google Gemini AI** - Primary AI generation engine (Vercel compatible)
 - **Discord Webhooks** - Notifications
 
 ---

@@ -258,34 +258,7 @@ Check [SCHEMA_EXAMPLES.md](./SCHEMA_EXAMPLES.md) for 20+ templates:
 ### PostgreSQL Database
 
 **Start PostgreSQL:**
-```bash
-docker run -d \
-  -p 5432:5432 \
-  -e POSTGRES_PASSWORD=password \
-  postgres:16
-```
-
-**Configure in Settings:**
-1. Go to Settings → Database
-2. Select "PostgreSQL"
-3. Enter connection details
-4. Click "Test Connection"
-
-### Ollama (Local AI)
-
-**Install Ollama:**
-```bash
-# macOS/Linux
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Start server
-ollama serve
-```
-
-**Configure in Settings:**
-1. Go to Settings → AI Models
-2. Select "Ollama"
-3. URL: `http://localhost:11434`
+DataForge AI is pre-configured to use **Neon.tech**. Simply add your connection details in the Settings page or via Vercel Environment Variables (`PG_HOST`, `PG_USER`, etc.) to enable cloud persistence.
 
 ### Discord Notifications
 
