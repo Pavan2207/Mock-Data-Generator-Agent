@@ -41,7 +41,7 @@ export function SettingsPage() {
     pgDatabase: import.meta.env.VITE_PG_DATABASE || "neondb", // Default to Neon database
     pgUser: import.meta.env.VITE_PG_USER || "neondb_owner", // Default to Neon user
     pgPassword: import.meta.env.VITE_PG_PASSWORD || "npg_w1gaoATtI3uj",
-    pgSsl: import.meta.env.VITE_PG_SSL !== "true", // Default to true for Neon
+    pgSsl: import.meta.env.VITE_PG_SSL !== "false", // Default to true for Neon
     apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "/api/db", // Vercel Serverless Function endpoint
 
     aiProvider: "gemini",
@@ -310,7 +310,7 @@ export function SettingsPage() {
                     <div className="space-y-2">
                       <Label className="text-xs text-slate-500 uppercase tracking-wider">Internal Connection String Preview</Label>
                       <div className="p-3 bg-slate-950 rounded border border-slate-800 font-mono text-[10px] text-slate-400 break-all">
-                        postgresql://{settings.pgUser}:****@{settings.pgHost}:{settings.pgPort}/{settings.pgDatabase}{settings.pgSsl ? '?sslmode=require' : ''}
+                        postgresql://{settings.pgUser}:****@{settings.pgHost}{settings.pgPort !== '5432' ? `:${settings.pgPort}` : ''}/{settings.pgDatabase}{settings.pgSsl ? '?sslmode=require' : ''}
                       </div>
                       <p className="text-[10px] text-slate-500 italic">
                         This string is sent to your Vercel Serverless Function for execution.

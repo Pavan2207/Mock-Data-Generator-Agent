@@ -21,7 +21,7 @@ const getPool = (c: any) => {
     database: pgDatabase,
     ssl: pgSsl ? { rejectUnauthorized: false } : false,
     connectionTimeoutMillis: 5000,
-    idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+    idleTimeoutMillis: 30000, 
   });
 };
 
@@ -53,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       case 'query':
         if (req.body.config?.dbType === 'sqlite') {
-          return res.status(501).json({ success: false, message: 'SQLite query execution via serverless bridge requires a local adapter or wasm runtime' });
+          return res.status(501).json({ success: false, message: 'SQLite query execution via serverless bridge requires a local adapter' });
         }
         const queryPool = getPool(req.body.config);
         if (!queryPool) return res.status(400).json({ success: false, message: 'Missing database configuration' });
@@ -65,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { schema, data, config: seedConfig } = req.body;
 
         if (seedConfig?.dbType === 'sqlite') {
-          return res.status(501).json({ success: false, message: 'Direct SQLite seeding via cloud bridge is limited. Use SQL export for local files.' });
+          return res.status(501).json({ success: false, message: 'Direct SQLite seeding via cloud bridge is limited.' });
         }
         
         const seedPool = getPool(seedConfig);
@@ -91,10 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await healthPool.end();
         return res.json({ status: 'ok', database: 'connected', time: new Date() });
 
-      case 'generate':
-        return res.status(501).json({ message: 'Use local faker engine for performance' });
-
-      case 'history': // Vercel functions are stateless, so history is in-memory for now
+      case 'history':
         return res.json([]);
 
       default:
