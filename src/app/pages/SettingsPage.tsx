@@ -110,7 +110,8 @@ export function SettingsPage() {
       if (error.name === 'AbortError') {
         message = "Connection timed out. The server took too long to respond (8s).";
       } else if (message.includes("Gateway Unreachable") || message === "Failed to fetch" || error.name === "TypeError") {
-        message = `Network Error: Vercel Serverless Function unreachable at ${settings.apiBaseUrl}. Ensure the function is deployed and healthy.`;
+        const displayUrl = settings.apiBaseUrl || "/api/db (relative)";
+        message = `Network Error: Vercel Serverless Function unreachable at ${displayUrl}. Ensure the function is deployed at /api/db/ and healthy.`;
       }
       
       setConnectionError(message);

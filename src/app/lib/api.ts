@@ -34,13 +34,14 @@ export const api = {
       body: JSON.stringify(config),
       signal,
     }).catch(err => {
-      throw new Error(`Gateway Unreachable. Ensure your Backend Gateway is running and CORS is enabled. Error: ${err.message}`);
+      throw new Error(`Gateway Unreachable: ${err.message}`);
     });
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error(`[API] DB Connection failed at ${endpoint}:`, errorData);
-      throw new Error(errorData.message || errorData.error || `Connection failed: ${response.statusText}`);
+      const errorMsg = errorData.message || errorData.error || response.statusText || `Status ${response.status}`;
+      throw new Error(`Connection failed: ${errorMsg}`);
     }
     return response.json();
   },
@@ -118,11 +119,12 @@ export const api = {
   },
 
   async seedDatabase(schema: Schema, data: any[], settings: any) {
-    // When using Vercel Serverless Functions, the API base URL is relative
-    const baseUrl = sanitizeUrl(settings?.apiBaseUrl || '');
-    // The endpoint will be /api/db/seed on Vercel
+    const baseUrl = sanitizeUrl(settings?.apiBaseUrl || getApiBaseUrl());
+    const endpoint = baseUrl.startsWith('/api/db') 
+      ? `${baseUrl}/seed` 
+      : (baseUrl === "" ? "/api/db/seed" : `${baseUrl}/api/db/seed`);
 
-    const response = await fetch(`${baseUrl}/api/db/seed`, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ schema, data, config: settings }),
@@ -173,9 +175,10 @@ export const api = {
   },
 
   async generateData(schema: Schema, rowCount: number) {
-    // This endpoint is for server-side generation, which is now handled by the Vercel function
-    const baseUrl = sanitizeUrl(''); // Base URL is relative for Vercel function
-    const response = await fetch(`${baseUrl}/api/db/generate`, { // Assuming a /api/db/generate endpoint
+    const baseUrl = sanitizeUrl(getApiBaseUrl());
+    const endpoint = baseUrl.startsWith('/api/db') ? `${baseUrl}/generate` : `${baseUrl}/api/db/generate`;
+    
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ schema, rowCount }),
@@ -186,9 +189,9 @@ export const api = {
 
   async saveGeneration(record: any) {
     // History is now handled by the Vercel function
-    const baseUrl = sanitizeUrl(''); // Base URL is relative for Vercel function
-    // The endpoint will be /api/db/history on Vercel
-    const response = await fetch(`${baseUrl}/api/history`, {
+    const baseUrl = sanitizeUrl(''); 
+    const endpoint = baseUrl.startsWith('/api/db') ? `${baseUrl}/history` : `${baseUrl}/api/db/history`;
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(record),
@@ -198,8 +201,9 @@ export const api = {
 
   async getHistory() {
     // History is now handled by the Vercel function
-    const baseUrl = sanitizeUrl(''); // Base URL is relative for Vercel function
-    const response = await fetch(`${baseUrl}/api/history`);
+    const baseUrl = sanitizeUrl(''); 
+    const endpoint = baseUrl.startsWith('/api/db') ? `${baseUrl}/history` : `${baseUrl}/api/db/history`;
+    const response = await fetch(endpoint);
     if (!response.ok) throw new Error("Failed to fetch history from server");
     return response.json();
   },
@@ -208,14 +212,14 @@ export const api = {
     try {
       let endpoint = "";
       // For Vercel Serverless Function, the base is relative
-      const base = sanitizeUrl(url || ''); 
+      const base = sanitizeUrl(url || '');
 
       // AI status checks (Gemini is external, gateway is now Vercel function)
       if (provider === "gemini") {
         endpoint = `https://generativelanguage.googleapis.com/v1beta/models?key=${key || ""}`;
       } else if (provider === "gateway") {
         // Check if the Node.js bridge is actually reachable
-        endpoint = `${base}/health`;
+        endpoint = base.startsWith('/api/db') ? `${base}/health` : `${base}/api/db/health`;
       } else {
         endpoint = `${base}/api/ai/status`;
       }
